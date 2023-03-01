@@ -8,6 +8,8 @@ pub use pallet::*;
 #[cfg(test)]
 mod mock;
 
+mod near;
+
 #[cfg(test)]
 mod tests;
 
