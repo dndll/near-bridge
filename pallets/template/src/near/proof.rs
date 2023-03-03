@@ -1,6 +1,10 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-
-use super::{hash::CryptoHash, merkle::MerklePath, types::Gas, views::LightClientBlockLiteView};
+use super::{
+	base64_format, dec_format,
+	hash::CryptoHash,
+	merkle::MerklePath,
+	types::{AccountId, Balance, Gas},
+	views::LightClientBlockLiteView,
+};
 
 pub enum TransactionOrReceiptId {
 	Transaction { hash: CryptoHash, sender: AccountId },
@@ -30,16 +34,7 @@ pub struct ExecutionOutcomeWithIdView {
 	pub outcome: ExecutionOutcomeView,
 }
 
-#[derive(
-	BorshSerialize,
-	BorshDeserialize,
-	Debug,
-	Clone,
-	PartialEq,
-	Eq,
-	serde::Serialize,
-	serde::Deserialize,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionOutcomeView {
 	/// Logs from this transaction or receipt.
 	pub logs: Vec<String>,
@@ -62,14 +57,12 @@ pub struct ExecutionOutcomeView {
 	pub metadata: ExecutionMetadataView,
 }
 
-#[derive(
-	BorshSerialize, BorshDeserialize, serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone,
-)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone, Debug)]
 pub enum ExecutionStatusView {
 	/// The execution is pending or unknown.
 	Unknown,
 	/// The execution has failed.
-	Failure(TxExecutionError),
+	Failure, //(TxExecutionError),
 	/// The final action succeeded and returned some value or an empty vec encoded in base64.
 	SuccessValue(#[serde(with = "base64_format")] Vec<u8>),
 	/// The final action of the receipt returned a promise or the signed transaction was converted
@@ -77,16 +70,7 @@ pub enum ExecutionStatusView {
 	SuccessReceiptId(CryptoHash),
 }
 
-#[derive(
-	BorshSerialize,
-	BorshDeserialize,
-	PartialEq,
-	Clone,
-	Eq,
-	Debug,
-	serde::Serialize,
-	serde::Deserialize,
-)]
+#[derive(PartialEq, Clone, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct CostGasUsed {
 	pub cost_category: String,
 	pub cost: String,
@@ -94,16 +78,7 @@ pub struct CostGasUsed {
 	pub gas_used: Gas,
 }
 
-#[derive(
-	BorshSerialize,
-	BorshDeserialize,
-	PartialEq,
-	Clone,
-	Eq,
-	Debug,
-	serde::Serialize,
-	serde::Deserialize,
-)]
+#[derive(PartialEq, Clone, Eq, Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct ExecutionMetadataView {
 	pub version: u32,
 	pub gas_profile: Option<Vec<CostGasUsed>>,

@@ -1,15 +1,19 @@
-use sha2::{Digest, Sha256};
-use std::{collections::HashMap, convert::TryInto};
-
 use self::{
 	block_header::ApprovalInner,
+	hash::CryptoHash,
 	views::{LightClientBlockView, ValidatorStakeView},
 };
+use codec::Encode;
+use serialize::{base64_format, dec_format};
+use sha2::{digest::Update, Digest, Sha256};
+use std::{collections::HashMap, convert::TryInto};
 
 pub mod block_header;
+pub mod client;
 pub mod hash;
 pub mod merkle;
 pub mod proof;
+pub mod serialize;
 pub mod types;
 pub mod views;
 
@@ -22,41 +26,39 @@ impl LightClientState {
 		&mut self,
 		block_view: &LightClientBlockView,
 	) -> ([u8; 32], [u8; 32], Vec<u8>) {
-		let current_block_hash = Sha256::new()
-			.chain(
-				Sha256::new()
-					.chain(
-						Sha256::new()
-							.chain(&block_view.inner_lite.to_vec())
-							.chain(&block_view.inner_rest_hash)
-							.finalize(),
-					)
-					.chain(&block_view.prev_block_hash)
-					.finalize(),
-			)
-			.finalize()
-			.try_into()
-			.unwrap();
+		let current_block_hash = CryptoHash::hash_bytes(
+			&Sha256::new()
+				.chain(
+					Sha256::new()
+						.chain(&borsh::to_vec(&block_view.inner_lite).unwrap())
+						.chain(&block_view.inner_rest_hash)
+						.finalize(),
+				)
+				.chain(&block_view.prev_block_hash)
+				.finalize(),
+		);
 
-		let next_block_hash = Sha256::new()
-			.chain(&block_view.next_block_inner_hash)
-			.chain(&current_block_hash)
-			.finalize()
-			.try_into()
-			.unwrap();
+		let next_block_hash: CryptoHash = CryptoHash::hash_bytes(
+			&vec![
+				block_view.next_block_inner_hash.as_bytes().to_vec(),
+				current_block_hash.as_bytes().to_vec(),
+			]
+			.concat(),
+		);
 
-		let mut approval_message =
-			borsh::to_vec(&ApprovalInner::Endorsement(next_block_hash)).unwrap();
+		let endorsement = ApprovalInner::Endorsement(next_block_hash);
+
+		let mut approval_message = CryptoHash::hash_borsh(&endorsement).as_bytes().to_vec();
 		approval_message.extend(&((block_view.inner_lite.height + 2) as u32).to_le_bytes());
 
-		(current_block_hash, next_block_hash, approval_message)
+		(*current_block_hash.as_bytes(), next_block_hash.into(), approval_message)
 	}
 
 	// TODO: introduce own state
 	fn validate_and_update_head(
 		&mut self,
 		block_view: &LightClientBlockView,
-		epoch_block_producers_map: &mut HashMap<u64, Vec<ValidatorStakeView>>,
+		epoch_block_producers_map: &mut HashMap<CryptoHash, Vec<ValidatorStakeView>>,
 	) -> bool {
 		let (current_block_hash, next_block_hash, approval_message) =
 			self.reconstruct_light_client_block_view_fields(block_view);
@@ -93,9 +95,10 @@ impl LightClientState {
 
 			if let Some(signature) = maybe_signature {
 				approved_stake += block_producer.stake;
-				if !verify_signature(&block_producer.public_key, &signature, &approval_message) {
-					return false
-				}
+				// TODO: add sig verification
+				// if !verify_signature(&block_producer.public_key, &signature, &approval_message) {
+				return false
+				// }
 			}
 		}
 
@@ -105,17 +108,16 @@ impl LightClientState {
 		}
 
 		// (6)
+		// FIXME: BUG HERE< NEEDS BORSCH SERIALIZE
 		if let Some(next_bps) = &block_view.next_bps {
-			if Sha256::digest(&borsh::to_vec(&next_bps).unwrap()) !=
-				block_view.inner_lite.next_bp_hash
-			{
+			if CryptoHash::hash_borsh(&next_bps) != block_view.inner_lite.next_bp_hash {
 				return false
 			}
 
 			epoch_block_producers_map.insert(block_view.inner_lite.next_epoch_id, next_bps.clone());
 		}
 
-		self.head = block_view;
+		self.head = block_view.to_owned();
 
 		true
 	}

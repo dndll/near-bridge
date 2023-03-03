@@ -1,11 +1,11 @@
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshSerialize;
 
 use super::{
 	hash::CryptoHash,
 	types::{BlockHeight, EpochId, MerkleHash},
 };
 
-#[derive(BorshSerialize, BorshDeserialize, serde::Serialize, Debug, Clone, Eq, PartialEq)]
+#[derive(serde::Serialize, Debug, Clone, Eq, PartialEq, BorshSerialize)]
 pub struct BlockHeaderInnerLite {
 	/// Height of this block.
 	pub height: BlockHeight,
@@ -27,7 +27,7 @@ pub struct BlockHeaderInnerLite {
 }
 
 /// The part of the block approval that is different for endorsements and skips
-#[derive(BorshSerialize, BorshDeserialize, serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, Hash, BorshSerialize)]
 pub enum ApprovalInner {
 	Endorsement(CryptoHash),
 	Skip(BlockHeight),

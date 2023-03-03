@@ -1,11 +1,10 @@
-use borsh::{BorshDeserialize, BorshSerialize};
+use super::dec_format;
+use borsh::BorshSerialize;
+/// Account identifier. Provides access to user's state.
 use derive_more::{AsRef as DeriveAsRef, From as DeriveFrom};
 use near_crypto::PublicKey;
-use once_cell::sync::Lazy;
 
-/// Account identifier. Provides access to user's state.
-pub use crate::account::id::AccountId;
-
+pub type AccountId = String;
 use super::hash::CryptoHash;
 /// Hash used by a struct implementing the Merkle tree.
 pub type MerkleHash = CryptoHash;
@@ -45,10 +44,9 @@ pub type StateRoot = CryptoHash;
 	PartialOrd,
 	Ord,
 	DeriveAsRef,
-	BorshSerialize,
-	BorshDeserialize,
 	serde::Serialize,
 	serde::Deserialize,
+	BorshSerialize,
 )]
 #[as_ref(forward)]
 pub struct EpochId(pub CryptoHash);
@@ -56,7 +54,7 @@ pub struct EpochId(pub CryptoHash);
 /// Stores validator and its stake for two consecutive epochs.
 /// It is necessary because the blocks on the epoch boundary need to contain approvals from both
 /// epochs.
-#[derive(BorshSerialize, BorshDeserialize, serde::Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ApprovalStake {
 	/// Account that stakes money.
 	pub account_id: AccountId,
