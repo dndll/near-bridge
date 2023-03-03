@@ -8,7 +8,7 @@ use sp_runtime::offchain::{
 use crate::{near::views::LightClientBlockView, Error};
 
 pub const NEAR_RPC_ENDPOINT: &str = "https://rpc.mainnet.near.org";
-const FETCH_TIMEOUT_PERIOD: u64 = 3000; // in milli-seconds
+const FETCH_TIMEOUT_PERIOD: u64 = 30000; // in milli-seconds
 const LOCK_TIMEOUT_EXPIRATION: u64 = FETCH_TIMEOUT_PERIOD + 1000; // in milli-seconds
 const LOCK_BLOCK_EXPIRATION: u32 = 3; // in block number
 
@@ -69,10 +69,10 @@ impl NearRpcRequestParams {
 	}
 }
 
-pub struct NearRpcClient {}
+pub struct NearRpcClient;
 
 impl NearRpcClient {
-	pub fn fetch_latest_header(latest_verified: &str) {
+	pub fn fetch_latest_header(&self, latest_verified: &str) {
 		let request_body: JsonRpc =
 			NearRpcRequestParams::NextBlock { last_block_hash: latest_verified.to_string() }.into();
 
@@ -80,7 +80,7 @@ impl NearRpcClient {
 			.method(Method::Post)
 			.url(NEAR_RPC_ENDPOINT)
 			.body(vec![serde_json::to_vec(&request_body).unwrap()])
-			.add_header("Content-Type", "Application/Json");
+			.add_header("Content-Type", "application/json");
 
 		// Keeping the offchain worker execution time reasonable, so limiting the call to be
 		// within 3s.
@@ -91,7 +91,7 @@ impl NearRpcClient {
 			.deadline(timeout) // Setting the timeout time
 			.send() // Sending the request out by the host
 			.map_err(|e| {
-				log::error!("{:?}", e);
+				println!("{:?}", e);
 				// <Error<T>>::HttpFetchingError
 			})
 			.unwrap();
@@ -130,6 +130,8 @@ impl NearRpcClient {
 
 #[cfg(test)]
 mod tests {
+	use crate::mock::new_test_ext;
+
 	use super::*;
 
 	#[test]
@@ -146,7 +148,13 @@ mod tests {
 			req,
 			r#"{"jsonrpc":"2.0","method":"next_light_client_block","params":{"last_block_hash":"2rs9o3B6nAQ3pEfVcBQdLnBqZrfpVuZJeKC8FpTshhua"},"id":"pallet-near"}"#
 		)
+	}
 
-		// TODO: should be
+	#[test]
+	fn test_give_it_a_bash() {
+		new_test_ext().execute_with(|| {
+			let r =
+				NearRpcClient.fetch_latest_header("2rs9o3B6nAQ3pEfVcBQdLnBqZrfpVuZJeKC8FpTshhua");
+		});
 	}
 }
