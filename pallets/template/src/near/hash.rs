@@ -18,6 +18,9 @@ use std::{
 	derive_more::AsMut,
 	borsh::BorshDeserialize,
 	borsh::BorshSerialize,
+	codec::Encode,
+	codec::Decode,
+	scale_info::TypeInfo,
 )]
 #[as_ref(forward)]
 #[as_mut(forward)]

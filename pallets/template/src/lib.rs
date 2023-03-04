@@ -25,8 +25,11 @@ pub mod pallet {
 		Duration,
 	};
 
+	use crate::near::{client::NearRpcClient, views::LightClientBlockLiteView};
+
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
+	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
@@ -36,13 +39,9 @@ pub mod pallet {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 	}
 
-	// The pallet's runtime storage items.
-	// https://docs.substrate.io/main-docs/build/runtime-storage/
 	#[pallet::storage]
-	#[pallet::getter(fn something)]
-	// Learn more about declaring storage items:
-	// https://docs.substrate.io/main-docs/build/runtime-storage/#declaring-storage-items
-	pub type Something<T> = StorageValue<_, u32>;
+	#[pallet::getter(fn light_client_head)]
+	pub type LightClientHead<T> = StorageValue<_, LightClientBlockLiteView>;
 
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/main-docs/build/events-errors/
@@ -82,7 +81,7 @@ pub mod pallet {
 			// 2. Sending unsigned transaction from ocw
 			// 3. Sending unsigned transactions with signed payloads from ocw
 			// 4. Fetching JSON via http requests in ocw
-			const TX_TYPES: u32 = 4;
+
 			// let modu = block_number.try_into().map_or(TX_TYPES, |bn: usize| (bn as u32) %
 			// TX_TYPES); let result = match modu {
 			// 	0 => Self::offchain_signed_tx(block_number),
@@ -95,6 +94,8 @@ pub mod pallet {
 			// if let Err(e) = result {
 			// 	log::error!("offchain_worker error: {:?}", e);
 			// }
+			let latest_header = LightClientHead::<T>::get().unwrap();
+			let head = NearRpcClient.fetch_latest_header(&format!("{}", latest_header.hash()));
 		}
 	}
 
@@ -108,38 +109,18 @@ pub mod pallet {
 		#[pallet::call_index(0)]
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
 		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://docs.substrate.io/main-docs/build/origins/
-			let who = ensure_signed(origin)?;
+			// // Check that the extrinsic was signed and get the signer.
+			// // This function will return an error if the extrinsic is not signed.
+			// // https://docs.substrate.io/main-docs/build/origins/
+			// let who = ensure_signed(origin)?;
 
-			// Update storage.
-			<Something<T>>::put(something);
+			// // Update storage.
+			// <Something<T>>::put(something);
 
-			// Emit an event.
-			Self::deposit_event(Event::SomethingStored { something, who });
-			// Return a successful DispatchResultWithPostInfo
+			// // Emit an event.
+			// Self::deposit_event(Event::SomethingStored { something, who });
+			// // Return a successful DispatchResultWithPostInfo
 			Ok(())
-		}
-
-		/// An example dispatchable that may throw a custom error.
-		#[pallet::call_index(1)]
-		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
-		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
-
-			// Read a value from storage.
-			match <Something<T>>::get() {
-				// Return an error if the value has not been set.
-				None => return Err(Error::<T>::NoneValue.into()),
-				Some(old) => {
-					// Increment the value read from storage; will error in the event of overflow.
-					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-					// Update the value in storage with the incremented result.
-					<Something<T>>::put(new);
-					Ok(())
-				},
-			}
 		}
 	}
 

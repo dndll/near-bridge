@@ -20,7 +20,18 @@ pub struct LightClientBlockView {
 	pub approvals_after_next: Vec<Option<Signature>>,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, serde::Serialize, serde::Deserialize, BorshSerialize)]
+#[derive(
+	PartialEq,
+	Eq,
+	Debug,
+	Clone,
+	serde::Serialize,
+	serde::Deserialize,
+	BorshSerialize,
+	codec::Encode,
+	codec::Decode,
+	scale_info::TypeInfo,
+)]
 pub struct BlockHeaderInnerLiteView {
 	pub height: BlockHeight,
 	pub epoch_id: CryptoHash,
@@ -50,7 +61,15 @@ impl From<BlockHeaderInnerLiteView> for BlockHeaderInnerLite {
 	}
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[derive(
+	serde::Serialize,
+	serde::Deserialize,
+	Debug,
+	Clone,
+	codec::Encode,
+	codec::Decode,
+	scale_info::TypeInfo,
+)]
 pub struct LightClientBlockLiteView {
 	pub prev_block_hash: CryptoHash,
 	pub inner_rest_hash: CryptoHash,
