@@ -1,9 +1,9 @@
 use self::{
 	block_header::ApprovalInner,
 	hash::CryptoHash,
-	views::{LightClientBlockView, ValidatorStakeView},
+	views::{LightClientBlockLiteView, LightClientBlockView, ValidatorStakeView},
 };
-use codec::Encode;
+use codec::{Decode, Encode};
 use serialize::{base64_format, dec_format};
 use sha2::{digest::Update, Digest, Sha256};
 use std::{collections::HashMap, convert::TryInto};
@@ -17,8 +17,10 @@ pub mod serialize;
 pub mod types;
 pub mod views;
 
+#[derive(Debug, Clone, Encode, Decode, scale_info::TypeInfo)]
 pub struct LightClientState {
-	pub head: LightClientBlockView,
+	pub head: LightClientBlockLiteView,
+	pub next_block_producers: Option<(CryptoHash, Vec<ValidatorStakeView>)>,
 }
 
 impl LightClientState {
@@ -54,11 +56,10 @@ impl LightClientState {
 		(*current_block_hash.as_bytes(), next_block_hash.into(), approval_message)
 	}
 
-	// TODO: introduce own state
-	fn validate_and_update_head(
+	pub fn validate_and_update_head(
 		&mut self,
 		block_view: &LightClientBlockView,
-		epoch_block_producers_map: &mut HashMap<CryptoHash, Vec<ValidatorStakeView>>,
+		epoch_block_producers: Vec<ValidatorStakeView>,
 	) -> bool {
 		let (current_block_hash, next_block_hash, approval_message) =
 			self.reconstruct_light_client_block_view_fields(block_view);
@@ -86,8 +87,8 @@ impl LightClientState {
 		let mut total_stake = 0;
 		let mut approved_stake = 0;
 
-		let epoch_block_producers =
-			epoch_block_producers_map.get(&block_view.inner_lite.epoch_id).unwrap();
+		// .get(&block_view.inner_lite.epoch_id).unwrap();
+		let epoch_block_producers = epoch_block_producers;
 		for (maybe_signature, block_producer) in
 			block_view.approvals_after_next.iter().zip(epoch_block_producers.iter())
 		{
@@ -113,10 +114,11 @@ impl LightClientState {
 				return false
 			}
 
-			epoch_block_producers_map.insert(block_view.inner_lite.next_epoch_id, next_bps.clone());
+			self.next_block_producers =
+				Some((block_view.inner_lite.next_epoch_id, next_bps.clone()));
 		}
 
-		self.head = block_view.to_owned();
+		self.head = LightClientBlockLiteView::from(block_view.to_owned());
 
 		true
 	}

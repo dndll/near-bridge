@@ -25,7 +25,15 @@ pub mod pallet {
 		Duration,
 	};
 
-	use crate::near::{client::NearRpcClient, views::LightClientBlockLiteView};
+	use crate::near::{
+		client::NearRpcClient,
+		hash::CryptoHash,
+		types::EpochId,
+		views::{LightClientBlockLiteView, ValidatorStakeView},
+		LightClientState,
+	};
+
+	pub const MAX_BLOCK_PRODUCERS: u32 = 1024;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
@@ -42,6 +50,15 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn light_client_head)]
 	pub type LightClientHead<T> = StorageValue<_, LightClientBlockLiteView>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn block_producers)]
+	pub type BlockProducersByEpoch<T> = StorageMap<
+		_,
+		Identity,
+		CryptoHash,
+		BoundedVec<ValidatorStakeView, ConstU32<MAX_BLOCK_PRODUCERS>>,
+	>;
 
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/main-docs/build/events-errors/
@@ -94,8 +111,20 @@ pub mod pallet {
 			// if let Err(e) = result {
 			// 	log::error!("offchain_worker error: {:?}", e);
 			// }
-			let latest_header = LightClientHead::<T>::get().unwrap();
-			let head = NearRpcClient.fetch_latest_header(&format!("{}", latest_header.hash()));
+			let last_verified_header = LightClientHead::<T>::get().unwrap();
+			let state = LightClientState { head: last_verified_header, next_block_producers: None };
+			let last_epoch_block_producers =
+				BlockProducersByEpoch::<T>::get(state.head.inner_lite.epoch_id).unwrap();
+
+			let new_head =
+				NearRpcClient.fetch_latest_header(&format!("{}", last_verified_header.hash()));
+			if state.validate_and_update_head(&new_head, last_epoch_block_producers.into()) {
+				LightClientHead::<T>::put(state.head);
+			}
+			if let Some((epoch, next_bps)) = state.next_block_producers {
+				let next_bps = BoundedVec::try_from(next_bps).unwrap();
+				BlockProducersByEpoch::<T>::insert(epoch, next_bps)
+			}
 		}
 	}
 

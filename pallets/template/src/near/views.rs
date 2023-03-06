@@ -76,6 +76,16 @@ pub struct LightClientBlockLiteView {
 	pub inner_lite: BlockHeaderInnerLiteView,
 }
 
+impl From<LightClientBlockView> for LightClientBlockLiteView {
+	fn from(block: LightClientBlockView) -> Self {
+		Self {
+			prev_block_hash: block.prev_block_hash,
+			inner_rest_hash: block.inner_rest_hash,
+			inner_lite: block.inner_lite,
+		}
+	}
+}
+
 impl LightClientBlockLiteView {
 	pub fn hash(&self) -> CryptoHash {
 		let block_header_inner_lite: BlockHeaderInnerLite = self.inner_lite.clone().into();
@@ -89,7 +99,18 @@ impl LightClientBlockLiteView {
 	}
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, BorshSerialize)]
+#[derive(
+	Debug,
+	Clone,
+	Eq,
+	PartialEq,
+	serde::Serialize,
+	serde::Deserialize,
+	BorshSerialize,
+	codec::Encode,
+	codec::Decode,
+	scale_info::TypeInfo,
+)]
 pub struct ValidatorStakeView {
 	pub account_id: AccountId,
 	pub public_key: PublicKey,
