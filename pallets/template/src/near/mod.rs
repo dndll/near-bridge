@@ -95,10 +95,9 @@ impl LightClientState {
 
 			if let Some(signature) = maybe_signature {
 				approved_stake += block_producer.stake;
-				// TODO: add sig verification
-				// if !verify_signature(&block_producer.public_key, &signature, &approval_message) {
-				return false
-				// }
+				if !signature.verify(&approval_message, &block_producer.public_key) {
+					return false
+				}
 			}
 		}
 
