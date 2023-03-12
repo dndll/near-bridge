@@ -101,6 +101,10 @@ impl LightClientState {
 			total_stake += block_producer.stake;
 
 			if let Some(signature) = maybe_signature {
+				println!(
+					"Checking if signature {} and message {:?} was signed by {}",
+					signature, approval_message, block_producer.public_key
+				);
 				approved_stake += block_producer.stake;
 				if !signature.verify(&approval_message, &block_producer.public_key) {
 					println!("Signature is invalid");
@@ -140,6 +144,8 @@ mod tests {
 		client::{JsonRpcResult, NearRpcResult},
 		*,
 	};
+	use ed25519_dalek::Verifier;
+	use near_crypto::Signature;
 	use serde_json;
 
 	fn get_file(file: &str) -> JsonRpcResult {
@@ -147,7 +153,8 @@ mod tests {
 	}
 
 	fn get_previous_header() -> LightClientBlockView {
-		if let NearRpcResult::NextBlock(header) = get_file("fixtures/previous.json").result {
+		if let NearRpcResult::NextBlock(header) = get_file("fixtures/2_previous_epoch.json").result
+		{
 			header
 		} else {
 			panic!("Expected block header")
@@ -155,7 +162,7 @@ mod tests {
 	}
 
 	fn get_next_header() -> LightClientBlockView {
-		if let NearRpcResult::NextBlock(header) = get_file("fixtures/next.json").result {
+		if let NearRpcResult::NextBlock(header) = get_file("fixtures/1_current_epoch.json").result {
 			header
 		} else {
 			panic!("Expected block header")
@@ -170,7 +177,17 @@ mod tests {
 
 	fn get_previous() -> LightClientBlockView {
 		let s: JsonRpcResult =
-			serde_json::from_reader(std::fs::File::open("fixtures/previous.json").unwrap())
+			serde_json::from_reader(std::fs::File::open("fixtures/2_previous_epoch.json").unwrap())
+				.unwrap();
+		if let NearRpcResult::NextBlock(header) = s.result {
+			header
+		} else {
+			panic!("Expected block header")
+		}
+	}
+	fn get_previous_previous() -> LightClientBlockView {
+		let s: JsonRpcResult =
+			serde_json::from_reader(std::fs::File::open("fixtures/3_previous_epoch.json").unwrap())
 				.unwrap();
 		if let NearRpcResult::NextBlock(header) = s.result {
 			header
@@ -185,7 +202,8 @@ mod tests {
 
 	fn get_next() -> LightClientBlockView {
 		let s: JsonRpcResult =
-			serde_json::from_reader(std::fs::File::open("fixtures/next.json").unwrap()).unwrap();
+			serde_json::from_reader(std::fs::File::open("fixtures/1_current_epoch.json").unwrap())
+				.unwrap();
 		if let NearRpcResult::NextBlock(header) = s.result {
 			header
 		} else {
@@ -207,13 +225,37 @@ mod tests {
 
 	#[test]
 	fn fake_validate_and_update_next() {
-		let mut state = LightClientState { head: get_previous().into(), next_bps: None };
+		let last_verified_head = get_previous();
+		// FIXME: need to get these, currently verifying against the next bps is why this test fails
+		let current_epoch_bps = get_previous_previous().next_bps.unwrap();
+
+		let mut state =
+			LightClientState { head: last_verified_head.clone().into(), next_bps: None };
+
 		let new_head = get_next();
 
-		let did_pass = state.validate_and_update_head(&new_head, get_previous().next_bps.unwrap());
+		let did_pass = state.validate_and_update_head(&new_head, current_epoch_bps);
 		assert!(did_pass);
 	}
 
 	#[test]
-	fn test_can_verify() {}
+	fn test_can_verify_one_sig() {
+		let mut state = LightClientState { head: get_previous().clone().into(), next_bps: None };
+		let (_, _, approval_message) =
+			state.reconstruct_light_client_block_view_fields(&get_next().clone().into());
+
+		let signature = get_previous().approvals_after_next[0].clone().unwrap();
+		if let Signature::ED25519(signature) = signature {
+			let bps = get_previous_previous().next_bps.unwrap();
+
+			// FIXME: need to get these, currently verifying against the next bps is why this test
+			// fails
+			let signer = bps[0].public_key.unwrap_as_ed25519();
+			let signer = ed25519_dalek::PublicKey::from_bytes(&signer.0).unwrap();
+
+			signer.verify(&approval_message[..], &signature).unwrap();
+		} else {
+			panic!("Expected ed25519 signature")
+		}
+	}
 }

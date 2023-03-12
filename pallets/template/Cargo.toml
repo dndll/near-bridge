@@ -45,6 +45,8 @@ base64 = "0.21.0"
 sp-core = { version = "7.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.37" }
 sp-io = { version = "7.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.37" }
 rand = "0.8.4"
+ed25519-dalek = "1.0.1"
+
 [features]
 default = ["std"]
 std = [

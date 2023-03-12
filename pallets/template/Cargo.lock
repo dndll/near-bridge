@@ -1715,6 +1715,7 @@ dependencies = [
  "borsh",
  "bs58",
  "derive_more",
+ "ed25519-dalek",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
