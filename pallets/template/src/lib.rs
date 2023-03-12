@@ -29,7 +29,7 @@ pub mod pallet {
 		client::NearRpcClient,
 		hash::CryptoHash,
 		types::EpochId,
-		views::{LightClientBlockLiteView, ValidatorStakeView},
+		views::{LightClientBlockLiteView, ValidatorStakeView, ValidatorStakeViewScaleHax},
 		LightClientState,
 	};
 
@@ -57,7 +57,7 @@ pub mod pallet {
 		_,
 		Identity,
 		CryptoHash,
-		BoundedVec<ValidatorStakeView, ConstU32<MAX_BLOCK_PRODUCERS>>,
+		BoundedVec<ValidatorStakeViewScaleHax, ConstU32<MAX_BLOCK_PRODUCERS>>,
 	>;
 
 	// Pallets use events to inform users when important changes are made.
@@ -108,48 +108,26 @@ pub mod pallet {
 			// 	_ => Err(Error::<T>::UnknownOffchainMux),
 			// };
 
-			// if let Err(e) = result {
-			// 	log::error!("offchain_worker error: {:?}", e);
-			// }
 			let last_verified_header = LightClientHead::<T>::get().unwrap();
-			let state = LightClientState { head: last_verified_header, next_block_producers: None };
-			let last_epoch_block_producers =
+			let mut state = LightClientState { head: last_verified_header, next_bps: None };
+			let bps: BoundedVec<ValidatorStakeViewScaleHax, ConstU32<MAX_BLOCK_PRODUCERS>> =
 				BlockProducersByEpoch::<T>::get(state.head.inner_lite.epoch_id).unwrap();
+			let bps: Vec<ValidatorStakeViewScaleHax> = bps.into();
+			let bps: Vec<ValidatorStakeView> =
+				bps.into_iter().map(|s| ValidatorStakeView::from(s)).collect();
 
-			let new_head =
-				NearRpcClient.fetch_latest_header(&format!("{}", last_verified_header.hash()));
-			if state.validate_and_update_head(&new_head, last_epoch_block_producers.into()) {
+			let new_head = NearRpcClient.fetch_latest_header(&format!("{}", state.head.hash()));
+
+			if state.validate_and_update_head(&new_head, bps) {
 				LightClientHead::<T>::put(state.head);
 			}
-			if let Some((epoch, next_bps)) = state.next_block_producers {
-				let next_bps = BoundedVec::try_from(next_bps).unwrap();
+			if let Some((epoch, next_bps)) = state.next_bps {
+				let next_bps: BoundedVec<
+					ValidatorStakeViewScaleHax,
+					ConstU32<MAX_BLOCK_PRODUCERS>,
+				> = BoundedVec::try_from(next_bps).unwrap();
 				BlockProducersByEpoch::<T>::insert(epoch, next_bps)
 			}
-		}
-	}
-
-	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
-	// These functions materialize as "extrinsics", which are often compared to transactions.
-	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
-	#[pallet::call]
-	impl<T: Config> Pallet<T> {
-		/// An example dispatchable that takes a singles value as a parameter, writes the value to
-		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
-		#[pallet::call_index(0)]
-		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
-		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
-			// // Check that the extrinsic was signed and get the signer.
-			// // This function will return an error if the extrinsic is not signed.
-			// // https://docs.substrate.io/main-docs/build/origins/
-			// let who = ensure_signed(origin)?;
-
-			// // Update storage.
-			// <Something<T>>::put(something);
-
-			// // Emit an event.
-			// Self::deposit_event(Event::SomethingStored { something, who });
-			// // Return a successful DispatchResultWithPostInfo
-			Ok(())
 		}
 	}
 

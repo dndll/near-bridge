@@ -1,6 +1,7 @@
 use borsh::BorshSerialize;
 use codec::{Decode, Encode};
-use near_crypto::{PublicKey, Signature};
+use near_crypto::{ED25519PublicKey, PublicKey, Secp256K1PublicKey, Signature};
+use sp_runtime::Either;
 
 use super::{
 	block_header::BlockHeaderInnerLite,
@@ -99,21 +100,46 @@ impl LightClientBlockLiteView {
 	}
 }
 
-#[derive(
-	Debug,
-	Clone,
-	Eq,
-	PartialEq,
-	serde::Serialize,
-	serde::Deserialize,
-	BorshSerialize,
-	codec::Encode,
-	codec::Decode,
-	scale_info::TypeInfo,
-)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, BorshSerialize)]
 pub struct ValidatorStakeView {
 	pub account_id: AccountId,
 	pub public_key: PublicKey,
 	#[serde(with = "dec_format")]
 	pub stake: Balance,
+}
+
+impl From<ValidatorStakeViewScaleHax> for ValidatorStakeView {
+	fn from(value: ValidatorStakeViewScaleHax) -> Self {
+		ValidatorStakeView {
+			account_id: value.account_id,
+			public_key: match value.public_key.len() {
+				32 =>
+					PublicKey::ED25519(ED25519PublicKey::try_from(&value.public_key[..]).unwrap()),
+				64 => PublicKey::SECP256K1(
+					Secp256K1PublicKey::try_from(&value.public_key[..]).unwrap(),
+				),
+				_ => panic!("Invalid public key length"),
+			},
+			stake: value.stake,
+		}
+	}
+}
+
+#[derive(
+	Debug, Clone, Eq, PartialEq, codec::Encode, codec::Decode, scale_info::TypeInfo, BorshSerialize,
+)]
+pub struct ValidatorStakeViewScaleHax {
+	pub account_id: AccountId,
+	pub public_key: Vec<u8>,
+	pub stake: Balance,
+}
+
+impl From<ValidatorStakeView> for ValidatorStakeViewScaleHax {
+	fn from(view: ValidatorStakeView) -> Self {
+		Self {
+			account_id: view.account_id,
+			public_key: view.public_key.key_data().to_vec(),
+			stake: view.stake,
+		}
+	}
 }

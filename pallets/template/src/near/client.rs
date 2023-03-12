@@ -36,7 +36,7 @@ impl From<NearRpcRequestParams> for JsonRpcRequest {
 #[derive(Deserialize, Serialize)]
 pub struct JsonRpcResult {
 	jsonrpc: String,
-	result: NearRpcResult,
+	pub result: NearRpcResult,
 	id: String,
 }
 
@@ -195,7 +195,7 @@ mod tests {
 	}
 
 	#[test]
-	fn test_give_it_a_bash() {
+	fn mock_execution() {
 		let mut t = new_test_ext();
 		let (offchain, offchain_state) = TestOffchainExt::with_offchain_db(t.offchain_db());
 		t.register_extension(OffchainDbExt::new(offchain.clone()));
@@ -245,11 +245,5 @@ mod tests {
 			.build_storage::<crate::mock::Test>()
 			.unwrap()
 			.into()
-	}
-
-	fn register_offchain_ext(ext: &mut sp_io::TestExternalities) {
-		let (offchain, offchain_state) = TestOffchainExt::with_offchain_db(ext.offchain_db());
-		ext.register_extension(OffchainDbExt::new(offchain.clone()));
-		ext.register_extension(OffchainWorkerExt::new(offchain));
 	}
 }

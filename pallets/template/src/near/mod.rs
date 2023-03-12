@@ -1,7 +1,10 @@
 use self::{
 	block_header::ApprovalInner,
 	hash::CryptoHash,
-	views::{LightClientBlockLiteView, LightClientBlockView, ValidatorStakeView},
+	views::{
+		LightClientBlockLiteView, LightClientBlockView, ValidatorStakeView,
+		ValidatorStakeViewScaleHax,
+	},
 };
 use codec::{Decode, Encode};
 use serialize::{base64_format, dec_format};
@@ -20,10 +23,12 @@ pub mod views;
 #[derive(Debug, Clone, Encode, Decode, scale_info::TypeInfo)]
 pub struct LightClientState {
 	pub head: LightClientBlockLiteView,
-	pub next_block_producers: Option<(CryptoHash, Vec<ValidatorStakeView>)>,
+	pub next_bps: Option<(CryptoHash, Vec<ValidatorStakeViewScaleHax>)>,
 }
 
 impl LightClientState {
+	// TODO: needs syncing
+
 	fn reconstruct_light_client_block_view_fields(
 		&mut self,
 		block_view: &LightClientBlockView,
@@ -64,7 +69,7 @@ impl LightClientState {
 		let (current_block_hash, next_block_hash, approval_message) =
 			self.reconstruct_light_client_block_view_fields(block_view);
 
-		// (1)
+		// (1) The block was already verified
 		if block_view.inner_lite.height <= self.head.inner_lite.height {
 			return false
 		}
@@ -76,7 +81,7 @@ impl LightClientState {
 			return false
 		}
 
-		// (3)
+		// (3) Same as next epoch and no new set, covering N + 2
 		if block_view.inner_lite.epoch_id == self.head.inner_lite.next_epoch_id &&
 			block_view.next_bps.is_none()
 		{
@@ -87,8 +92,6 @@ impl LightClientState {
 		let mut total_stake = 0;
 		let mut approved_stake = 0;
 
-		// .get(&block_view.inner_lite.epoch_id).unwrap();
-		let epoch_block_producers = epoch_block_producers;
 		for (maybe_signature, block_producer) in
 			block_view.approvals_after_next.iter().zip(epoch_block_producers.iter())
 		{
@@ -114,12 +117,50 @@ impl LightClientState {
 				return false
 			}
 
-			self.next_block_producers =
-				Some((block_view.inner_lite.next_epoch_id, next_bps.clone()));
+			self.next_bps = Some((
+				block_view.inner_lite.next_epoch_id,
+				next_bps.into_iter().map(|s| s.clone().into()).collect(),
+			));
 		}
 
 		self.head = LightClientBlockLiteView::from(block_view.to_owned());
 
 		true
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{
+		client::{JsonRpcResult, NearRpcResult},
+		*,
+	};
+	use serde_json;
+
+	fn get_file(file: &str) -> JsonRpcResult {
+		serde_json::from_reader(std::fs::File::open(file).unwrap()).unwrap()
+	}
+
+	fn get_previous_header() -> LightClientBlockView {
+		if let NearRpcResult::NextBlock(header) = get_file("fixtures/previous.json").result {
+			header
+		} else {
+			panic!("Expected block header")
+		}
+	}
+
+	fn get_next_header() -> LightClientBlockView {
+		if let NearRpcResult::NextBlock(header) = get_file("fixtures/expected_response.json").result
+		{
+			header
+		} else {
+			panic!("Expected block header")
+		}
+	}
+
+	#[test]
+	fn test_sig_verification() {
+		let previous = get_previous_header();
+		let next = get_next_header();
 	}
 }
