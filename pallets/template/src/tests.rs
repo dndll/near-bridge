@@ -1,12 +1,10 @@
-use crate::{mock::*, Error, Event};
+use crate::{
+	mock::*,
+	near::{
+		client::{JsonRpcResult, NearRpcResult},
+		views::{LightClientBlockView, ValidatorStakeView, ValidatorStakeViewScaleHax},
+		LightClientState,
+	},
+	Error, Event,
+};
 use frame_support::{assert_noop, assert_ok};
-
-#[test]
-fn it_works_for_default_value() {
-	new_test_ext().execute_with(|| {});
-}
-
-#[test]
-fn correct_error_for_none_value() {
-	new_test_ext().execute_with(|| {});
-}

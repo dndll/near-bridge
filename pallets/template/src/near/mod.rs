@@ -71,6 +71,7 @@ impl LightClientState {
 
 		// (1) The block was already verified
 		if block_view.inner_lite.height <= self.head.inner_lite.height {
+			println!("Block has already been verified");
 			return false
 		}
 
@@ -78,6 +79,7 @@ impl LightClientState {
 		if ![self.head.inner_lite.epoch_id, self.head.inner_lite.next_epoch_id]
 			.contains(&block_view.inner_lite.epoch_id)
 		{
+			println!("Block is not in the current or next epoch");
 			return false
 		}
 
@@ -85,6 +87,7 @@ impl LightClientState {
 		if block_view.inner_lite.epoch_id == self.head.inner_lite.next_epoch_id &&
 			block_view.next_bps.is_none()
 		{
+			println!("Block is in the next epoch but no new set");
 			return false
 		}
 
@@ -100,6 +103,7 @@ impl LightClientState {
 			if let Some(signature) = maybe_signature {
 				approved_stake += block_producer.stake;
 				if !signature.verify(&approval_message, &block_producer.public_key) {
+					println!("Signature is invalid");
 					return false
 				}
 			}
@@ -114,6 +118,7 @@ impl LightClientState {
 		// FIXME: BUG HERE< NEEDS BORSCH SERIALIZE
 		if let Some(next_bps) = &block_view.next_bps {
 			if CryptoHash::hash_borsh(&next_bps) != block_view.inner_lite.next_bp_hash {
+				println!("Next block producers hash is invalid");
 				return false
 			}
 
@@ -150,8 +155,7 @@ mod tests {
 	}
 
 	fn get_next_header() -> LightClientBlockView {
-		if let NearRpcResult::NextBlock(header) = get_file("fixtures/expected_response.json").result
-		{
+		if let NearRpcResult::NextBlock(header) = get_file("fixtures/next.json").result {
 			header
 		} else {
 			panic!("Expected block header")
@@ -163,4 +167,53 @@ mod tests {
 		let previous = get_previous_header();
 		let next = get_next_header();
 	}
+
+	fn get_previous() -> LightClientBlockView {
+		let s: JsonRpcResult =
+			serde_json::from_reader(std::fs::File::open("fixtures/previous.json").unwrap())
+				.unwrap();
+		if let NearRpcResult::NextBlock(header) = s.result {
+			header
+		} else {
+			panic!("Expected block header")
+		}
+	}
+
+	fn get_next_bps() -> Vec<ValidatorStakeView> {
+		get_previous().next_bps.unwrap()
+	}
+
+	fn get_next() -> LightClientBlockView {
+		let s: JsonRpcResult =
+			serde_json::from_reader(std::fs::File::open("fixtures/next.json").unwrap()).unwrap();
+		if let NearRpcResult::NextBlock(header) = s.result {
+			header
+		} else {
+			panic!("Expected block header")
+		}
+	}
+
+	#[test]
+	fn test_deserialize_into_hax_correctly() {
+		let bps = get_next_bps();
+
+		let hax: Vec<ValidatorStakeViewScaleHax> = bps.iter().map(|s| s.clone().into()).collect();
+
+		let bps_again: Vec<ValidatorStakeView> =
+			hax.iter().map(|s| s.clone().into()).collect::<Vec<_>>();
+
+		assert_eq!(bps, bps_again);
+	}
+
+	#[test]
+	fn fake_validate_and_update_next() {
+		let mut state = LightClientState { head: get_previous().into(), next_bps: None };
+		let new_head = get_next();
+
+		let did_pass = state.validate_and_update_head(&new_head, get_previous().next_bps.unwrap());
+		assert!(did_pass);
+	}
+
+	#[test]
+	fn test_can_verify() {}
 }
