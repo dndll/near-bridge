@@ -1,14 +1,18 @@
+use crate::near::{block_header::BlockHeaderInnerLite, hash::sha256};
+
 use self::{
 	block_header::ApprovalInner,
 	hash::CryptoHash,
 	views::{
-		LightClientBlockLiteView, LightClientBlockView, ValidatorStakeView,
-		ValidatorStakeViewScaleHax,
+		BlockHeaderInnerLiteView, LightClientBlockLiteView, LightClientBlockView,
+		ValidatorStakeView, ValidatorStakeViewScaleHax,
 	},
 };
+use crate::near::hash::borsh as borshit;
 use codec::{Decode, Encode};
 use serialize::{base64_format, dec_format};
 use sha2::{digest::Update, Digest, Sha256};
+use sp_core::bytes::to_hex;
 use std::{collections::HashMap, convert::TryInto};
 
 pub mod block_header;
@@ -26,38 +30,64 @@ pub struct LightClientState {
 	pub next_bps: Option<(CryptoHash, Vec<ValidatorStakeViewScaleHax>)>,
 }
 
+macro_rules! cvec {
+	($($x:expr),*) => {
+		{
+			let mut temp_vec = Vec::new();
+			$(
+				temp_vec.extend_from_slice(&$x);
+			)*
+			temp_vec
+		}
+	};
+}
 impl LightClientState {
 	// TODO: needs syncing
 
+	fn inner_lite_hash(ilv: &BlockHeaderInnerLiteView) -> CryptoHash {
+		let full_inner: BlockHeaderInnerLite = ilv.clone().into();
+		CryptoHash::hash_borsh(full_inner)
+	}
+
+	fn calculate_current_block_hash(block_view: &LightClientBlockView) -> CryptoHash {
+		let inner_light_hash = Self::inner_lite_hash(&block_view.inner_lite).as_bytes().to_vec();
+		let inner_hash =
+			sha256(&cvec!(inner_light_hash, block_view.inner_rest_hash.as_bytes().to_vec()));
+		CryptoHash::hash_bytes(&cvec!(inner_hash, block_view.prev_block_hash.as_bytes().to_vec()))
+	}
+
+	fn next_block_hash(
+		&self,
+		current_block_hash: &CryptoHash,
+		block_view: &LightClientBlockView,
+	) -> CryptoHash {
+		let next_block_hash: CryptoHash = CryptoHash::hash_bytes(&cvec!(
+			block_view.next_block_inner_hash.as_bytes().to_vec(),
+			current_block_hash.as_bytes().to_vec()
+		));
+		next_block_hash
+	}
 	fn reconstruct_light_client_block_view_fields(
 		&mut self,
 		block_view: &LightClientBlockView,
 	) -> ([u8; 32], [u8; 32], Vec<u8>) {
-		let current_block_hash = CryptoHash::hash_bytes(
-			&Sha256::new()
-				.chain(
-					Sha256::new()
-						.chain(&borsh::to_vec(&block_view.inner_lite).unwrap())
-						.chain(&block_view.inner_rest_hash)
-						.finalize(),
-				)
-				.chain(&block_view.prev_block_hash)
-				.finalize(),
-		);
+		let current_block_hash = Self::calculate_current_block_hash(block_view);
 
-		let next_block_hash: CryptoHash = CryptoHash::hash_bytes(
-			&vec![
-				block_view.next_block_inner_hash.as_bytes().to_vec(),
-				current_block_hash.as_bytes().to_vec(),
-			]
-			.concat(),
-		);
+		let next_block_hash: CryptoHash = self.next_block_hash(&current_block_hash, block_view);
 
 		let endorsement = ApprovalInner::Endorsement(next_block_hash);
 
-		let mut approval_message = CryptoHash::hash_borsh(&endorsement).as_bytes().to_vec();
-		approval_message.extend(&((block_view.inner_lite.height + 2) as u32).to_le_bytes());
+		let approval_message =
+			cvec!(borshit(&endorsement), (block_view.inner_lite.height + 2).to_le_bytes());
 
+		// let mut approval_message = CryptoHash::hash_borsh(&endorsement).as_bytes().to_vec();
+		// TODO: possible bug here where block height is not a u64
+		// approval_message.extend(&((block_view.inner_lite.height + 2) as u32).to_le_bytes());
+		// println!("Approval: {:?}", approval_message);
+
+		println!("Current block hash: {}", current_block_hash);
+		println!("Next block hash: {}", next_block_hash);
+		println!("Approval message: {:?}", approval_message);
 		(*current_block_hash.as_bytes(), next_block_hash.into(), approval_message)
 	}
 
@@ -140,13 +170,19 @@ impl LightClientState {
 
 #[cfg(test)]
 mod tests {
+	use core::str::FromStr;
+
 	use super::{
+		block_header::BlockHeaderInnerLite,
 		client::{JsonRpcResult, NearRpcResult},
+		views::BlockHeaderInnerLiteView,
 		*,
 	};
+	use borsh::{BorshDeserialize, BorshSerialize};
 	use ed25519_dalek::Verifier;
 	use near_crypto::Signature;
 	use serde_json;
+	use sp_core::bytes::from_hex;
 
 	fn get_file(file: &str) -> JsonRpcResult {
 		serde_json::from_reader(std::fs::File::open(file).unwrap()).unwrap()
@@ -256,6 +292,60 @@ mod tests {
 			signer.verify(&approval_message[..], &signature).unwrap();
 		} else {
 			panic!("Expected ed25519 signature")
+		}
+	}
+	#[test]
+	fn test_reconstruction() {
+		let mut state = LightClientState { head: get_previous().clone().into(), next_bps: None };
+		let (current, next, approval_message) =
+			state.reconstruct_light_client_block_view_fields(&&get_previous().clone().into());
+
+		// previous was Doy7Y7aVMgN8YhdAseGBMHNmYoqzWsXszqJ7MFLNMcQ7
+		// next was GYs64ihr2tmobU8trG31ALJ5Mtgo6YtsVomYKgeE6G5i
+	}
+
+	#[test]
+	fn test_hash_compute() {
+		let file = "fixtures/well_known_header.json";
+		let prev_hash =
+			CryptoHash::from_str("BUcVEkMq3DcZzDGgeh1sb7FFuD86XYcXpEt25Cf34LuP").unwrap();
+		let well_known_header: BlockHeaderInnerLite =
+			serde_json::from_reader(std::fs::File::open(file).unwrap()).unwrap();
+		let well_known_header_view: BlockHeaderInnerLiteView =
+			BlockHeaderInnerLiteView::from(well_known_header.clone());
+
+		let view_bytes = well_known_header.try_to_vec().unwrap();
+		let expected = from_hex("040000000000000000000000000000000000000000000000000000000000000000000000000000009331b2bf4028e466f9d172fcbd0892cc063f0e8a0d8d751205b145c1bf573016a022eda2c13024e2cb4a11d2787b7670508bc627f3ff6c6d65e73ef476cb81ad66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f292500aa8070ffa2c9160f64f9ad70f5c0e8b197af0d1e010a2e202c02f73e86d30a68b1002765501e27e89ea8e5e3226b50d8193eb15f7d80830451f11e91e48a6ed7bda87fdee83803").unwrap();
+		assert_eq!(view_bytes, expected);
+
+		let inner_light_hash = CryptoHash::hash_bytes(&view_bytes);
+		let expected =
+			CryptoHash::from_str("6u6qjC19Z2aDWujqdKf52u1FHCQSvpQ1af7Y4fdWKwzU").unwrap();
+		assert_eq!(inner_light_hash, expected);
+		assert_eq!(inner_light_hash, LightClientState::inner_lite_hash(&well_known_header_view));
+
+		// Inner rest hashing
+		for (inner_rest, expected) in vec![
+			(
+				"FaU2VzTNqxfouDtkQWcmrmU2UdvtSES3rQuccnZMtWAC",
+				"3ckGjcedZiN3RnvfiuEN83BtudDTVa9Pub4yZ8R737qt",
+			),
+			(
+				"BEqJyfEYNNrKmhHToZTvbeYqVjoqSe2w2uTMMT9KDaqb",
+				"Hezx56VTH815G6JTzWqJ7iuWxdR9X4ZqGwteaDF8q2z",
+			),
+			(
+				"7Kg3Uqeg7XSoQ7qXbed5JUR48YE49EgLiuqBTRuiDq6j",
+				"Finjr87adnUqpFHVXbmAWiVAY12EA9G4DfUw27XYHox",
+			),
+		] {
+			let inner_rest_hash = CryptoHash::from_str(inner_rest).unwrap();
+			let expected = CryptoHash::from_str(expected).unwrap();
+
+			let inner_hash = sha256(&cvec!(inner_light_hash.0, inner_rest_hash.0));
+			let current_hash =
+				CryptoHash::hash_bytes(&cvec!(inner_hash, prev_hash.as_bytes().to_vec()));
+			assert_eq!(current_hash, expected);
 		}
 	}
 }

@@ -26,6 +26,14 @@ use std::{
 #[as_mut(forward)]
 pub struct CryptoHash(pub [u8; 32]);
 
+pub fn sha256(bytes: &[u8]) -> Vec<u8> {
+	CryptoHash(sha2::Sha256::digest(bytes).into()).0.to_vec()
+}
+
+pub fn borsh<T: BorshSerialize>(value: T) -> Vec<u8> {
+	CryptoHash::hash_borsh(value).as_bytes().to_vec()
+}
+
 impl CryptoHash {
 	pub const fn new() -> Self {
 		Self([0; 32])

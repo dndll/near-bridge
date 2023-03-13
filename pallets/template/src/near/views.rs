@@ -1,4 +1,4 @@
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use codec::{Decode, Encode};
 use near_crypto::{ED25519PublicKey, PublicKey, Secp256K1PublicKey, Signature};
 use sp_runtime::Either;
@@ -29,6 +29,7 @@ pub struct LightClientBlockView {
 	serde::Serialize,
 	serde::Deserialize,
 	BorshSerialize,
+	BorshDeserialize,
 	codec::Encode,
 	codec::Decode,
 	scale_info::TypeInfo,
@@ -47,17 +48,18 @@ pub struct BlockHeaderInnerLiteView {
 	pub block_merkle_root: CryptoHash,
 }
 
-impl From<BlockHeaderInnerLiteView> for BlockHeaderInnerLite {
-	fn from(view: BlockHeaderInnerLiteView) -> Self {
-		BlockHeaderInnerLite {
-			height: view.height,
-			epoch_id: EpochId(view.epoch_id),
-			next_epoch_id: EpochId(view.next_epoch_id),
-			prev_state_root: view.prev_state_root,
-			outcome_root: view.outcome_root,
-			timestamp: view.timestamp_nanosec,
-			next_bp_hash: view.next_bp_hash,
-			block_merkle_root: view.block_merkle_root,
+impl From<BlockHeaderInnerLite> for BlockHeaderInnerLiteView {
+	fn from(block_header: BlockHeaderInnerLite) -> Self {
+		Self {
+			height: block_header.height,
+			epoch_id: block_header.epoch_id.0,
+			next_epoch_id: block_header.next_epoch_id.0,
+			prev_state_root: block_header.prev_state_root,
+			outcome_root: block_header.outcome_root,
+			timestamp: block_header.timestamp,
+			timestamp_nanosec: block_header.timestamp,
+			next_bp_hash: block_header.next_bp_hash,
+			block_merkle_root: block_header.block_merkle_root,
 		}
 	}
 }
