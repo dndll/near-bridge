@@ -31,7 +31,7 @@ pub fn sha256(bytes: &[u8]) -> Vec<u8> {
 }
 
 pub fn borsh<T: BorshSerialize>(value: T) -> Vec<u8> {
-	CryptoHash::hash_borsh(value).as_bytes().to_vec()
+	value.try_to_vec().unwrap()
 }
 
 impl CryptoHash {

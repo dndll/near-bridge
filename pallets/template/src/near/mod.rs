@@ -9,6 +9,7 @@ use self::{
 	},
 };
 use crate::near::hash::borsh as borshit;
+use borsh::BorshSerialize;
 use codec::{Decode, Encode};
 use serialize::{base64_format, dec_format};
 use sha2::{digest::Update, Digest, Sha256};
@@ -60,11 +61,7 @@ impl LightClientState {
 		current_block_hash: &CryptoHash,
 		block_view: &LightClientBlockView,
 	) -> CryptoHash {
-		let next_block_hash: CryptoHash = CryptoHash::hash_bytes(&cvec!(
-			block_view.next_block_inner_hash.as_bytes().to_vec(),
-			current_block_hash.as_bytes().to_vec()
-		));
-		next_block_hash
+		CryptoHash::hash_bytes(&cvec!(block_view.next_block_inner_hash.0, current_block_hash.0))
 	}
 	fn reconstruct_light_client_block_view_fields(
 		&mut self,
@@ -78,11 +75,6 @@ impl LightClientState {
 
 		let approval_message =
 			cvec!(borshit(&endorsement), (block_view.inner_lite.height + 2).to_le_bytes());
-
-		// let mut approval_message = CryptoHash::hash_borsh(&endorsement).as_bytes().to_vec();
-		// TODO: possible bug here where block height is not a u64
-		// approval_message.extend(&((block_view.inner_lite.height + 2) as u32).to_le_bytes());
-		// println!("Approval: {:?}", approval_message);
 
 		println!("Current block hash: {}", current_block_hash);
 		println!("Next block hash: {}", next_block_hash);
@@ -281,11 +273,12 @@ mod tests {
 
 		let signature = get_previous().approvals_after_next[0].clone().unwrap();
 		if let Signature::ED25519(signature) = signature {
-			let bps = get_previous_previous().next_bps.unwrap();
+			let first_validator = &get_previous_previous().next_bps.unwrap()[0];
+			println!("first_validator: {:?}", first_validator);
 
 			// FIXME: need to get these, currently verifying against the next bps is why this test
 			// fails
-			let signer = bps[0].public_key.unwrap_as_ed25519();
+			let signer = first_validator.public_key.unwrap_as_ed25519();
 			let signer = ed25519_dalek::PublicKey::from_bytes(&signer.0).unwrap();
 
 			signer.verify(&approval_message[..], &signature).unwrap();
