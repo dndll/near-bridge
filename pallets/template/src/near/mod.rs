@@ -171,7 +171,7 @@ mod tests {
 	};
 	use borsh::{BorshDeserialize, BorshSerialize};
 	use ed25519_dalek::Verifier;
-	use near_crypto::Signature;
+	use near_crypto::{KeyType, Signature};
 	use serde_json;
 	use sp_core::bytes::from_hex;
 
@@ -227,7 +227,7 @@ mod tests {
 		get_previous().next_bps.unwrap()
 	}
 
-	fn get_next() -> LightClientBlockView {
+	fn get_current() -> LightClientBlockView {
 		let s: JsonRpcResult =
 			serde_json::from_reader(std::fs::File::open("fixtures/1_current_epoch.json").unwrap())
 				.unwrap();
@@ -259,19 +259,57 @@ mod tests {
 		let mut state =
 			LightClientState { head: last_verified_head.clone().into(), next_bps: None };
 
-		let new_head = get_next();
+		let new_head = get_current();
 
 		let did_pass = state.validate_and_update_head(&new_head, current_epoch_bps);
 		assert!(did_pass);
 	}
 
-	#[test]
-	fn test_can_verify_one_sig() {
-		let mut state = LightClientState { head: get_previous().clone().into(), next_bps: None };
-		let (_, _, approval_message) =
-			state.reconstruct_light_client_block_view_fields(&get_next().clone().into());
+	fn get_epochs() -> Vec<(u32, LightClientBlockView, CryptoHash)> {
+		vec![
+			(
+				1,
+				get_previous_previous(),
+				CryptoHash::from_str("B35Jn6mLXACRcsf6PATMixqgzqJZd71JaNh1LScJjFuJ").unwrap(),
+			),
+			(
+				2,
+				get_previous(),
+				CryptoHash::from_str("Doy7Y7aVMgN8YhdAseGBMHNmYoqzWsXszqJ7MFLNMcQ7").unwrap(),
+			), // Doy7Y7aVMgN8YhdAseGBMHNmYoqzWsXszqJ7MFLNMcQ7
+			(
+				3,
+				get_current(),
+				CryptoHash::from_str("3tyxRRBgbYTo5DYd1LpX3EZtEiRYbDAAji6kcsf9QRge").unwrap(),
+			), // 3tyxRRBgbYTo5DYd1LpX3EZtEiRYbDAAji6kcsf9QRge
+		]
+	}
 
-		let signature = get_previous().approvals_after_next[0].clone().unwrap();
+	#[test]
+	fn test_headers() {
+		let headers_by_epoch = get_epochs();
+		let next_epoch_id = headers_by_epoch[1].1.inner_lite.epoch_id.clone();
+
+		let mut state = LightClientState {
+			head: headers_by_epoch[0].1.clone().into(),
+			next_bps: Some((
+				next_epoch_id,
+				headers_by_epoch[0]
+					.1
+					.next_bps
+					.clone()
+					.unwrap()
+					.into_iter()
+					.map(Into::into)
+					.collect(),
+			)),
+		};
+
+		let (current, _, approval_message) =
+			state.reconstruct_light_client_block_view_fields(&headers_by_epoch[1].1);
+		assert_eq!(current, headers_by_epoch[1].2 .0);
+
+		let signature = headers_by_epoch[1].1.approvals_after_next[0].clone().unwrap();
 		if let Signature::ED25519(signature) = signature {
 			let first_validator = &get_previous_previous().next_bps.unwrap()[0];
 			println!("first_validator: {:?}", first_validator);
@@ -286,6 +324,46 @@ mod tests {
 			panic!("Expected ed25519 signature")
 		}
 	}
+
+	// #[test]
+	// fn test_can_verify_one_sig() {
+	// 	let prev_hash =
+	// 		CryptoHash::from_str("7aLAqDbJtwYQTVJz8xHTcRUgTYDGcYGkBptPCNXBrpSA").unwrap();
+
+	// 	let file = "fixtures/well_known_header.json";
+	// 	let head: BlockHeaderInnerLite =
+	// 		serde_json::from_reader(std::fs::File::open(file).unwrap()).unwrap();
+
+	// 	let view: LightClientBlockLiteView = LightClientBlockView {
+	// 		inner_lite: BlockHeaderInnerLiteView::from(head.clone()),
+	// 		inner_rest_hash,
+	// 		prev_block_hash: prev_hash,
+	// 		// Not needed for this test
+	// 		approvals_after_next: vec![],
+	// 		next_bps: None,
+	// 		next_block_inner_hash: CryptoHash::default(),
+	// 	}
+	// 	.into();
+
+	// 	let mut state = LightClientState { head: view, next_bps: None };
+	// 	let (current_block_hash, next_block_hash, approval_message) =
+	// 		state.reconstruct_light_client_block_view_fields(&get_next().clone().into());
+
+	// 	let signature = ed25519_dalek::Signature::from_bytes(&[0; 64]).unwrap();
+	// 	if let Signature::ED25519(signature) = signature {
+	// 		let first_validator = &get_previous_previous().next_bps.unwrap()[0];
+	// 		println!("first_validator: {:?}", first_validator);
+
+	// 		// FIXME: need to get these, currently verifying against the next bps is why this test
+	// 		// fails
+	// 		let signer = first_validator.public_key.unwrap_as_ed25519();
+	// 		let signer = ed25519_dalek::PublicKey::from_bytes(&signer.0).unwrap();
+
+	// 		signer.verify(&approval_message[..], &signature).unwrap();
+	// 	} else {
+	// 		panic!("Expected ed25519 signature")
+	// 	}
+	// }
 
 	#[test]
 	fn test_inner_lite_hash_issue() {
