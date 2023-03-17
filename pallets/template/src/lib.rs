@@ -28,7 +28,7 @@ pub mod pallet {
 	use crate::near::{
 		client::NearRpcClient,
 		hash::CryptoHash,
-		types::EpochId,
+		types::{BlockHeight, EpochId},
 		views::{LightClientBlockLiteView, ValidatorStakeView, ValidatorStakeViewScaleHax},
 		LightClientState,
 	};
@@ -91,42 +91,47 @@ pub mod pallet {
 		/// so the code should be able to handle that.
 		/// You can use `Local Storage` API to coordinate runs of the worker.
 		fn offchain_worker(block_number: T::BlockNumber) {
-			// log::info!("Hello from pallet-near.");
+			let mut state =
+				LightClientState { head: LightClientHead::<T>::get().unwrap(), next_bps: None };
 
-			// Here we are showcasing various techniques used when running off-chain workers (ocw)
-			// 1. Sending signed transaction from ocw
-			// 2. Sending unsigned transaction from ocw
-			// 3. Sending unsigned transactions with signed payloads from ocw
-			// 4. Fetching JSON via http requests in ocw
+			// TODO: handle if need to bootstrap, i.e no head and no block producers
 
-			// let modu = block_number.try_into().map_or(TX_TYPES, |bn: usize| (bn as u32) %
-			// TX_TYPES); let result = match modu {
-			// 	0 => Self::offchain_signed_tx(block_number),
-			// 	1 => Self::offchain_unsigned_tx(block_number),
-			// 	2 => Self::offchain_unsigned_tx_signed_payload(block_number),
-			// 	3 => Self::fetch_remote_info(),
-			// 	_ => Err(Error::<T>::UnknownOffchainMux),
-			// };
-
-			let last_verified_header = LightClientHead::<T>::get().unwrap();
-			let mut state = LightClientState { head: last_verified_header, next_bps: None };
 			let bps: BoundedVec<ValidatorStakeViewScaleHax, ConstU32<MAX_BLOCK_PRODUCERS>> =
 				BlockProducersByEpoch::<T>::get(state.head.inner_lite.epoch_id).unwrap();
-			let bps: Vec<ValidatorStakeViewScaleHax> = bps.into();
 			let bps: Vec<ValidatorStakeView> =
 				bps.into_iter().map(|s| ValidatorStakeView::from(s)).collect();
 
-			let new_head = NearRpcClient.fetch_latest_header(&format!("{}", state.head.hash()));
+			// Here we will have a mechanism to only try to sync if needs be, otherwise we will go
+			// through verification. Receipts to be verified should be stored
+			// reverse-chronologically in a Dequeue, since we will likely already have verified
+			// the earliest headers.
 
-			if state.validate_and_update_head(&new_head, bps) {
-				LightClientHead::<T>::put(state.head);
-			}
-			if let Some((epoch, next_bps)) = state.next_bps {
-				let next_bps: BoundedVec<
-					ValidatorStakeViewScaleHax,
-					ConstU32<MAX_BLOCK_PRODUCERS>,
-				> = BoundedVec::try_from(next_bps).unwrap();
-				BlockProducersByEpoch::<T>::insert(epoch, next_bps)
+			let queue: Vec<BlockHeight> = Vec::new();
+
+			// determine if should sync by checking if last tx in the queue is newer than our
+			// head
+			let last_is_newer =
+				queue.last().map(|h| h > &state.head.inner_lite.height).unwrap_or(false);
+			let should_sync = last_is_newer;
+
+			if should_sync {
+				// TODO: if so start verifying from queue
+				let new_head = NearRpcClient.fetch_latest_header(&format!("{}", state.head.hash()));
+
+				if state.validate_and_update_head(&new_head, bps) {
+					LightClientHead::<T>::put(state.head);
+				}
+				if let Some((epoch, next_bps)) = state.next_bps {
+					let next_bps: BoundedVec<
+						ValidatorStakeViewScaleHax,
+						ConstU32<MAX_BLOCK_PRODUCERS>,
+					> = BoundedVec::try_from(next_bps).unwrap();
+					BlockProducersByEpoch::<T>::insert(epoch, next_bps)
+				}
+			} else {
+				// TODO: start verifying from earliest
+
+				// TODO: also verify some from middle to avoid ddos
 			}
 		}
 	}
