@@ -102,8 +102,41 @@ impl LightClientBlockLiteView {
 	}
 }
 
+/// Stores validator and its stake.
+#[derive(BorshSerialize, serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(tag = "validator_stake_struct_version")]
+pub enum ValidatorStakeView {
+	V1(ValidatorStakeV1),
+}
+
+impl ValidatorStakeView {
+	pub fn account_id(&self) -> &AccountId {
+		match self {
+			ValidatorStakeView::V1(v) => &v.account_id,
+		}
+	}
+
+	pub fn public_key(&self) -> &PublicKey {
+		match self {
+			ValidatorStakeView::V1(v) => &v.public_key,
+		}
+	}
+
+	pub fn stake(&self) -> Balance {
+		match self {
+			ValidatorStakeView::V1(v) => v.stake,
+		}
+	}
+
+	pub fn unwrap_v1(self) -> ValidatorStakeV1 {
+		match self {
+			ValidatorStakeView::V1(v) => v,
+		}
+	}
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, BorshSerialize)]
-pub struct ValidatorStakeView {
+pub struct ValidatorStakeV1 {
 	pub account_id: AccountId,
 	pub public_key: PublicKey,
 	#[serde(with = "dec_format")]
@@ -112,7 +145,7 @@ pub struct ValidatorStakeView {
 
 impl From<ValidatorStakeViewScaleHax> for ValidatorStakeView {
 	fn from(value: ValidatorStakeViewScaleHax) -> Self {
-		ValidatorStakeView {
+		ValidatorStakeView::V1(ValidatorStakeV1 {
 			account_id: value.account_id,
 			public_key: match value.public_key.len() {
 				32 =>
@@ -123,7 +156,7 @@ impl From<ValidatorStakeViewScaleHax> for ValidatorStakeView {
 				_ => panic!("Invalid public key length"),
 			},
 			stake: value.stake,
-		}
+		})
 	}
 }
 
@@ -138,10 +171,12 @@ pub struct ValidatorStakeViewScaleHax {
 
 impl From<ValidatorStakeView> for ValidatorStakeViewScaleHax {
 	fn from(view: ValidatorStakeView) -> Self {
-		Self {
-			account_id: view.account_id,
-			public_key: view.public_key.key_data().to_vec(),
-			stake: view.stake,
+		match view {
+			ValidatorStakeView::V1(view) => Self {
+				account_id: view.account_id,
+				public_key: view.public_key.key_data().to_vec(),
+				stake: view.stake,
+			},
 		}
 	}
 }

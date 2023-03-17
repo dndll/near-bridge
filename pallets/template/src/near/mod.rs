@@ -119,20 +119,23 @@ impl LightClientState {
 		for (maybe_signature, block_producer) in
 			block_view.approvals_after_next.iter().zip(epoch_block_producers.iter())
 		{
-			total_stake += block_producer.stake;
+			total_stake += block_producer.stake();
 
 			if let Some(signature) = maybe_signature {
 				println!(
 					"Checking if signature {} and message {:?} was signed by {}",
-					signature, approval_message, block_producer.public_key
+					signature,
+					approval_message,
+					block_producer.public_key()
 				);
-				approved_stake += block_producer.stake;
-				if !signature.verify(&approval_message, &block_producer.public_key) {
+				approved_stake += block_producer.stake();
+				if !signature.verify(&approval_message, &block_producer.public_key()) {
 					println!("Signature is invalid");
 					return false
 				}
 			}
 		}
+		println!("All signatures are valid");
 
 		let threshold = total_stake * 2 / 3;
 		if approved_stake <= threshold {
@@ -142,7 +145,11 @@ impl LightClientState {
 		// (6)
 		// FIXME: BUG HERE< NEEDS BORSCH SERIALIZE
 		if let Some(next_bps) = &block_view.next_bps {
-			if CryptoHash::hash_borsh(&next_bps) != block_view.inner_lite.next_bp_hash {
+			let next_bps_hash = CryptoHash::hash_borsh(&next_bps);
+			println!("Next block producers calculated hash: {}", next_bps_hash);
+			println!("Next block producers hash: {}", block_view.inner_lite.next_bp_hash);
+
+			if next_bps_hash != block_view.inner_lite.next_bp_hash {
 				println!("Next block producers hash is invalid");
 				return false
 			}
@@ -316,13 +323,39 @@ mod tests {
 
 			// FIXME: need to get these, currently verifying against the next bps is why this test
 			// fails
-			let signer = first_validator.public_key.unwrap_as_ed25519();
+			let signer = first_validator.public_key().unwrap_as_ed25519();
 			let signer = ed25519_dalek::PublicKey::from_bytes(&signer.0).unwrap();
 
 			signer.verify(&approval_message[..], &signature).unwrap();
 		} else {
 			panic!("Expected ed25519 signature")
 		}
+	}
+
+	#[test]
+	fn test_validate() {
+		let headers_by_epoch = get_epochs();
+		let next_epoch_id = headers_by_epoch[1].1.inner_lite.epoch_id.clone();
+
+		let mut state = LightClientState {
+			head: headers_by_epoch[0].1.clone().into(),
+			next_bps: Some((
+				next_epoch_id,
+				headers_by_epoch[0]
+					.1
+					.next_bps
+					.clone()
+					.unwrap()
+					.into_iter()
+					.map(Into::into)
+					.collect(),
+			)),
+		};
+
+		assert!(state.validate_and_update_head(
+			&headers_by_epoch[1].1.clone(),
+			headers_by_epoch[0].1.next_bps.clone().unwrap(),
+		));
 	}
 
 	// #[test]
