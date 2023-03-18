@@ -9,12 +9,8 @@ use self::{
 	},
 };
 use crate::near::hash::borsh as borshit;
-use borsh::BorshSerialize;
 use codec::{Decode, Encode};
 use serialize::{base64_format, dec_format};
-use sha2::{digest::Update, Digest, Sha256};
-use sp_core::bytes::to_hex;
-use std::{collections::HashMap, convert::TryInto};
 
 pub mod block_header;
 pub mod client;
@@ -87,8 +83,7 @@ impl LightClientState {
 		block_view: &LightClientBlockView,
 		epoch_block_producers: Vec<ValidatorStakeView>,
 	) -> bool {
-		let (current_block_hash, next_block_hash, approval_message) =
-			self.reconstruct_light_client_block_view_fields(block_view);
+		let (_, _, approval_message) = self.reconstruct_light_client_block_view_fields(block_view);
 
 		// (1) The block was already verified
 		if block_view.inner_lite.height <= self.head.inner_lite.height {
@@ -143,7 +138,6 @@ impl LightClientState {
 		}
 
 		// (6)
-		// FIXME: BUG HERE< NEEDS BORSCH SERIALIZE
 		if let Some(next_bps) = &block_view.next_bps {
 			let next_bps_hash = CryptoHash::hash_borsh(&next_bps);
 			println!("Next block producers calculated hash: {}", next_bps_hash);

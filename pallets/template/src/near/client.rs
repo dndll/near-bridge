@@ -1,11 +1,9 @@
-use frame_support::sp_runtime::offchain::http;
+use crate::near::views::LightClientBlockView;
 use serde::{Deserialize, Serialize};
 use sp_runtime::offchain::{
 	http::{Method, Request},
 	Duration,
 };
-
-use crate::{near::views::LightClientBlockView, Error};
 
 pub const NEAR_RPC_ENDPOINT: &str = "https://rpc.mainnet.near.org";
 const FETCH_TIMEOUT_PERIOD: u64 = 30000; // in milli-seconds
@@ -54,6 +52,7 @@ pub enum NearRpcResult {
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(untagged)]
 pub enum LightClientProofParams {
 	Transaction { transaction_hash: String, sender_id: String },
 	Receipt { receipt_id: String, receiver_id: String },
@@ -178,7 +177,7 @@ mod tests {
 	}
 
 	#[test]
-	fn test_serialize_correctly() {
+	fn test_serialize_next_block_correctly() {
 		let request = NearRpcRequestParams::NextBlock {
 			last_block_hash: "2rs9o3B6nAQ3pEfVcBQdLnBqZrfpVuZJeKC8FpTshhua".to_string(),
 		};
@@ -190,6 +189,28 @@ mod tests {
 		assert_eq!(
 			req,
 			r#"{"jsonrpc":"2.0","method":"next_light_client_block","params":{"last_block_hash":"2rs9o3B6nAQ3pEfVcBQdLnBqZrfpVuZJeKC8FpTshhua"},"id":"pallet-near"}"#
+		)
+	}
+
+	#[test]
+	fn test_serialize_tx_proof_correctly() {
+		let request = NearRpcRequestParams::ExperimentalLightClientProof {
+			kind: "receipt".to_string(),
+			params: LightClientProofParams::Receipt {
+				receipt_id: "5TGZe4jsuUGx9A65HNuEMkb3J4vW6Wo2pxDbyzYFrDeC".to_string(),
+				receiver_id: "7496c752687339dbd12c68535011a8994cfa727f3263bdb65fc879063c4b365a"
+					.to_string(),
+			},
+			light_client_head: "14gQvvYkY2MrKxikmSoEF5nmgwnrQZqU6kmfxdaSSS88".to_string(),
+		};
+		let json_rpc: JsonRpcRequest = request.into();
+		assert_eq!(json_rpc.jsonrpc, "2.0");
+		assert_eq!(json_rpc.method, "EXPERIMENTAL_light_client_proof");
+		let req = serde_json::to_string(&json_rpc).unwrap();
+		println!("{}", req);
+		assert_eq!(
+			req,
+			r#"{"jsonrpc":"2.0","method":"EXPERIMENTAL_light_client_proof","params":{"type":"receipt","receipt_id":"5TGZe4jsuUGx9A65HNuEMkb3J4vW6Wo2pxDbyzYFrDeC","receiver_id":"7496c752687339dbd12c68535011a8994cfa727f3263bdb65fc879063c4b365a","light_client_head":"14gQvvYkY2MrKxikmSoEF5nmgwnrQZqU6kmfxdaSSS88"},"id":"pallet-near"}"#
 		)
 	}
 

@@ -1,14 +1,13 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use codec::{Decode, Encode};
 use near_crypto::{ED25519PublicKey, PublicKey, Secp256K1PublicKey, Signature};
-use sp_runtime::Either;
 
 use super::{
 	block_header::BlockHeaderInnerLite,
 	hash::{hash, CryptoHash},
 	merkle::combine_hash,
 	serialize::dec_format,
-	types::{AccountId, Balance, BlockHeight, EpochId},
+	types::{AccountId, Balance, BlockHeight},
 };
 
 #[derive(PartialEq, Eq, Debug, Clone, serde::Serialize, serde::Deserialize, BorshSerialize)]
