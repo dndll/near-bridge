@@ -91,30 +91,51 @@ pub mod pallet {
 		/// so the code should be able to handle that.
 		/// You can use `Local Storage` API to coordinate runs of the worker.
 		fn offchain_worker(block_number: T::BlockNumber) {
-			let mut state =
-				LightClientState { head: LightClientHead::<T>::get().unwrap(), next_bps: None };
+			let (mut state, bps) = if let Some(head) = LightClientHead::<T>::get() {
+				let state = LightClientState { head, next_bps: None };
+				let bps: Vec<ValidatorStakeView> =
+					BlockProducersByEpoch::<T>::get(state.head.inner_lite.epoch_id)
+						.unwrap()
+						.into_iter()
+						.map(|s| ValidatorStakeView::from(s))
+						.collect();
+				(state, bps)
+			} else {
+				// Bootstrap here
+				let where_to_get_bps_for_start = "BoswxxbPApgouVZNH37jKo6PF9WgrcqqgYjEW8tdXXPU";
+				let bps =
+					NearRpcClient.fetch_latest_header(where_to_get_bps_for_start).next_bps.unwrap();
 
-			// TODO: handle if need to bootstrap, i.e no head and no block producers
-
-			let bps: BoundedVec<ValidatorStakeViewScaleHax, ConstU32<MAX_BLOCK_PRODUCERS>> =
-				BlockProducersByEpoch::<T>::get(state.head.inner_lite.epoch_id).unwrap();
-			let bps: Vec<ValidatorStakeView> =
-				bps.into_iter().map(|s| ValidatorStakeView::from(s)).collect();
+				// decide when to start from
+				// get current block and store in `Started`
+				let start_block_hash = "61dCmpAvCMDMfjsgXejpmpMZpLFhBkUbhCY8QVbdZEai";
+				let starting_head = NearRpcClient.fetch_latest_header(start_block_hash);
+				// get epoch head
+				// get epoch - 1 block producers
+				let state = LightClientState { head: starting_head.into(), next_bps: None };
+				(state, bps)
+			};
 
 			// Here we will have a mechanism to only try to sync if needs be, otherwise we will go
 			// through verification. Receipts to be verified should be stored
 			// reverse-chronologically in a Dequeue, since we will likely already have verified
 			// the earliest headers.
-
-			let queue: Vec<BlockHeight> = Vec::new();
+			// TODO: implement locking on the queue, or at least locking on the syncing aspect
+			// TODO: then another worker can start verifying TXs
+			let verification_queue: Vec<BlockHeight> = Vec::new();
 
 			// determine if should sync by checking if last tx in the queue is newer than our
 			// head
-			let last_is_newer =
-				queue.last().map(|h| h > &state.head.inner_lite.height).unwrap_or(false);
-			let should_sync = last_is_newer;
+			let last_is_newer = verification_queue
+				.last()
+				.map(|h| h > &state.head.inner_lite.height)
+				.unwrap_or(false);
+
+			let should_sync = last_is_newer || verification_queue.is_empty();
 
 			if should_sync {
+				log::info!("Syncing from head: {:?}", state.head.inner_lite.height);
+
 				// TODO: if so start verifying from queue
 				let new_head = NearRpcClient.fetch_latest_header(&format!("{}", state.head.hash()));
 
@@ -129,8 +150,7 @@ pub mod pallet {
 					BlockProducersByEpoch::<T>::insert(epoch, next_bps)
 				}
 			} else {
-				// TODO: start verifying from earliest
-
+				// TODO: start verifying from front of queue
 				// TODO: also verify some from middle to avoid ddos
 			}
 		}

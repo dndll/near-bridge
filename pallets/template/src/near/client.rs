@@ -5,7 +5,10 @@ use sp_runtime::offchain::{
 	Duration,
 };
 
+mod rpc;
+
 pub const NEAR_RPC_ENDPOINT: &str = "https://rpc.mainnet.near.org";
+pub const NEAR_RPC_ARCHIVE_ENDPOINT: &str = "https://archival-rpc.mainnet.near.org";
 const FETCH_TIMEOUT_PERIOD: u64 = 30000; // in milli-seconds
 const LOCK_TIMEOUT_EXPIRATION: u64 = FETCH_TIMEOUT_PERIOD + 1000; // in milli-seconds
 const LOCK_BLOCK_EXPIRATION: u32 = 3; // in block number
@@ -92,9 +95,13 @@ pub struct NearRpcClient;
 
 impl NearRpcClient {
 	pub fn build_request(&self, body: &JsonRpcRequest) -> Request<Vec<Vec<u8>>> {
+		let endpoint = match body.params {
+			NearRpcRequestParams::NextBlock { .. } => NEAR_RPC_ENDPOINT,
+			NearRpcRequestParams::ExperimentalLightClientProof { .. } => NEAR_RPC_ARCHIVE_ENDPOINT,
+		};
 		Request::default()
 			.method(Method::Post)
-			.url(NEAR_RPC_ENDPOINT)
+			.url(endpoint)
 			.body(vec![serde_json::to_vec(body).unwrap()])
 			.add_header("Content-Type", "application/json")
 	}
