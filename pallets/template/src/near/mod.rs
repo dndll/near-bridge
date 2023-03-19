@@ -19,8 +19,10 @@ pub mod hash;
 pub mod merkle;
 pub mod proof;
 pub mod serialize;
+pub mod signature;
 pub mod types;
 pub mod views;
+pub mod errors;
 
 #[derive(Debug, Clone, Encode, Decode, scale_info::TypeInfo)]
 pub struct LightClientState {

@@ -38,18 +38,25 @@ sha2 = { version = "0.10", default-features = false }
 derive_more = { version = "0.99.9", default-features = false, features = [
 	"as_ref",
 	"as_mut",
+	"into",
 ] }
 # near-crypto = { version = "0.16.0" }
 bs58 = { version = "0.4", default-features = false }
 borsh = { version = "0.9", default-features = false }
 thiserror = { version = "*", default-features = false }
 thiserror-no-std = { version = "*", default-features = false }
+secp256k1 = { version = "0.27.0", default-features = false, features = [
+	"recovery",
+] }
+ed25519-dalek = { version = "1.0.1", default-features = false, features = [
+	"u64_backend",
+] }
+rand = { version = "0.8.5", optional = true, features = ["small_rng"] }
 base64 = { version = "0.21.0", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 sp-io = { version = "7.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.37" }
 rand = "0.8.4"
-ed25519-dalek = "1.0.1"
 
 [features]
 default = ["std"]
@@ -62,8 +69,11 @@ std = [
 	"sp-core/std",
 
 	"serde/std",
+	"secp256k1/std",
+	"ed25519-dalek/std",
 	"serde_json/std",
 	"sha2/std",
+	"rand/std",
 	"bs58/std",
 	"borsh/std",
 	"base64/std",
