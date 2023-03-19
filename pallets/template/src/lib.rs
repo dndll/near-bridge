@@ -18,19 +18,22 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
-	use sp_runtime::offchain::{
-		storage_lock::{BlockAndTime, StorageLock},
-		Duration,
-	};
-
 	use crate::near::{
 		client::NearRpcClient,
 		hash::CryptoHash,
 		types::{BlockHeight, EpochId},
 		views::{LightClientBlockLiteView, ValidatorStakeView, ValidatorStakeViewScaleHax},
 		LightClientState,
+	};
+	use borsh::maybestd::format;
+	use frame_support::pallet_prelude::*;
+	use frame_system::pallet_prelude::*;
+	use sp_runtime::{
+		offchain::{
+			storage_lock::{BlockAndTime, StorageLock},
+			Duration,
+		},
+		sp_std::{prelude::*, vec},
 	};
 
 	pub const MAX_BLOCK_PRODUCERS: u32 = 1024;

@@ -1,8 +1,10 @@
 use super::dec_format;
-use borsh::BorshSerialize;
+use borsh::{maybestd::string::String, BorshSerialize};
+
 /// Account identifier. Provides access to user's state.
 use derive_more::{AsRef as DeriveAsRef, From as DeriveFrom};
 use near_crypto::PublicKey;
+use sp_runtime::sp_std::{prelude::*, vec};
 
 pub type AccountId = String;
 use super::hash::CryptoHash;

@@ -1,11 +1,11 @@
 use borsh::BorshSerialize;
-use serde::{Deserializer, Serializer};
-use sha2::Digest;
-use std::{
+use core::{
 	fmt,
 	hash::{Hash, Hasher},
-	io::Write,
 };
+use serde::{Deserializer, Serializer};
+use sha2::Digest;
+use sp_runtime::sp_std::{prelude::*, vec};
 
 #[derive(
 	Copy,
@@ -95,7 +95,7 @@ impl CryptoHash {
 		// enough.
 		let mut buffer = [0u8; 45];
 		let len = bs58::encode(self).into(&mut buffer[..]).unwrap();
-		let value = std::str::from_utf8(&buffer[..len]).unwrap();
+		let value = str::from_utf8(&buffer[..len]).unwrap();
 		visitor(value)
 	}
 
@@ -149,7 +149,7 @@ struct Visitor;
 impl<'de> serde::de::Visitor<'de> for Visitor {
 	type Value = CryptoHash;
 
-	fn expecting(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+	fn expecting(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 		fmt.write_str("base58-encoded 256-bit hash")
 	}
 
@@ -171,8 +171,8 @@ impl<'de> serde::Deserialize<'de> for CryptoHash {
 	}
 }
 
-impl std::str::FromStr for CryptoHash {
-	type Err = Box<dyn std::error::Error + Send + Sync>;
+impl core::str::FromStr for CryptoHash {
+	type Err = Box<dyn core::error::Error + Send + Sync>;
 
 	/// Decodes base58-encoded string into a 32-byte crypto hash.
 	fn from_str(encoded: &str) -> Result<Self, Self::Err> {
@@ -185,7 +185,7 @@ impl std::str::FromStr for CryptoHash {
 }
 
 impl TryFrom<&[u8]> for CryptoHash {
-	type Error = Box<dyn std::error::Error + Send + Sync>;
+	type Error = Box<dyn core::error::Error + Send + Sync>;
 
 	fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
 		Ok(CryptoHash(bytes.try_into()?))
@@ -248,7 +248,7 @@ pub fn hash(data: &[u8]) -> CryptoHash {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::str::FromStr;
+	use core::str::FromStr;
 
 	#[derive(serde::Deserialize, serde::Serialize)]
 	struct Struct {

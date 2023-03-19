@@ -5,6 +5,8 @@ use super::{
 	types::{AccountId, Balance, Gas},
 	views::LightClientBlockLiteView,
 };
+use borsh::maybestd::string::String;
+use sp_runtime::sp_std::{prelude::*, vec};
 
 pub enum TransactionOrReceiptId {
 	Transaction { hash: CryptoHash, sender: AccountId },

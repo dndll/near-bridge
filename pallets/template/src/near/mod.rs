@@ -11,6 +11,7 @@ use self::{
 use crate::near::hash::borsh as borshit;
 use codec::{Decode, Encode};
 use serialize::{base64_format, dec_format};
+use sp_runtime::sp_std::{prelude::*, vec};
 
 pub mod block_header;
 pub mod client;
@@ -72,9 +73,9 @@ impl LightClientState {
 		let approval_message =
 			cvec!(borshit(&endorsement), (block_view.inner_lite.height + 2).to_le_bytes());
 
-		println!("Current block hash: {}", current_block_hash);
-		println!("Next block hash: {}", next_block_hash);
-		println!("Approval message: {:?}", approval_message);
+		log::info!("Current block hash: {}", current_block_hash);
+		log::info!("Next block hash: {}", next_block_hash);
+		log::info!("Approval message: {:?}", approval_message);
 		(*current_block_hash.as_bytes(), next_block_hash.into(), approval_message)
 	}
 
@@ -87,7 +88,7 @@ impl LightClientState {
 
 		// (1) The block was already verified
 		if block_view.inner_lite.height <= self.head.inner_lite.height {
-			println!("Block has already been verified");
+			log::info!("Block has already been verified");
 			return false
 		}
 
@@ -95,7 +96,7 @@ impl LightClientState {
 		if ![self.head.inner_lite.epoch_id, self.head.inner_lite.next_epoch_id]
 			.contains(&block_view.inner_lite.epoch_id)
 		{
-			println!("Block is not in the current or next epoch");
+			log::info!("Block is not in the current or next epoch");
 			return false
 		}
 
@@ -103,7 +104,7 @@ impl LightClientState {
 		if block_view.inner_lite.epoch_id == self.head.inner_lite.next_epoch_id &&
 			block_view.next_bps.is_none()
 		{
-			println!("Block is in the next epoch but no new set");
+			log::info!("Block is in the next epoch but no new set");
 			return false
 		}
 
@@ -117,7 +118,7 @@ impl LightClientState {
 			total_stake += block_producer.stake();
 
 			if let Some(signature) = maybe_signature {
-				println!(
+				log::info!(
 					"Checking if signature {} and message {:?} was signed by {}",
 					signature,
 					approval_message,
@@ -125,12 +126,12 @@ impl LightClientState {
 				);
 				approved_stake += block_producer.stake();
 				if !signature.verify(&approval_message, &block_producer.public_key()) {
-					println!("Signature is invalid");
+					log::info!("Signature is invalid");
 					return false
 				}
 			}
 		}
-		println!("All signatures are valid");
+		log::info!("All signatures are valid");
 
 		let threshold = total_stake * 2 / 3;
 		if approved_stake <= threshold {
@@ -140,11 +141,11 @@ impl LightClientState {
 		// (6)
 		if let Some(next_bps) = &block_view.next_bps {
 			let next_bps_hash = CryptoHash::hash_borsh(&next_bps);
-			println!("Next block producers calculated hash: {}", next_bps_hash);
-			println!("Next block producers hash: {}", block_view.inner_lite.next_bp_hash);
+			log::info!("Next block producers calculated hash: {}", next_bps_hash);
+			log::info!("Next block producers hash: {}", block_view.inner_lite.next_bp_hash);
 
 			if next_bps_hash != block_view.inner_lite.next_bp_hash {
-				println!("Next block producers hash is invalid");
+				log::info!("Next block producers hash is invalid");
 				return false
 			}
 
@@ -313,7 +314,7 @@ mod tests {
 		let signature = headers_by_epoch[1].1.approvals_after_next[0].clone().unwrap();
 		if let Signature::ED25519(signature) = signature {
 			let first_validator = &get_previous_previous().next_bps.unwrap()[0];
-			println!("first_validator: {:?}", first_validator);
+			log::info!("first_validator: {:?}", first_validator);
 
 			// FIXME: need to get these, currently verifying against the next bps is why this test
 			// fails
@@ -379,7 +380,7 @@ mod tests {
 	// 	let signature = ed25519_dalek::Signature::from_bytes(&[0; 64]).unwrap();
 	// 	if let Signature::ED25519(signature) = signature {
 	// 		let first_validator = &get_previous_previous().next_bps.unwrap()[0];
-	// 		println!("first_validator: {:?}", first_validator);
+	// 		log::info!("first_validator: {:?}", first_validator);
 
 	// 		// FIXME: need to get these, currently verifying against the next bps is why this test
 	// 		// fails

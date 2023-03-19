@@ -1,8 +1,12 @@
 use crate::near::views::LightClientBlockView;
+use borsh::maybestd::string::String;
 use serde::{Deserialize, Serialize};
-use sp_runtime::offchain::{
-	http::{Method, Request},
-	Duration,
+use sp_runtime::{
+	offchain::{
+		http::{Method, Request},
+		Duration,
+	},
+	sp_std::{prelude::*, vec},
 };
 
 mod rpc;
@@ -121,7 +125,7 @@ impl NearRpcClient {
 			.deadline(timeout) // Setting the timeout time
 			.send() // Sending the request out by the host
 			.map_err(|e| {
-				println!("{:?}", e);
+				log::info!("{:?}", e);
 				// <Error<T>>::HttpFetchingError
 			})
 			.unwrap();
@@ -133,23 +137,23 @@ impl NearRpcClient {
 		let response = pending
 			.try_wait(timeout)
 			.map_err(|e| {
-				println!("{:?}", e);
+				log::info!("{:?}", e);
 				// <Error<T>>::HttpFetchingError
 			})
 			.unwrap()
 			.map_err(|e| {
-				println!("{:?}", e);
+				log::info!("{:?}", e);
 				// <Error<T>>::HttpFetchingError
 			})
 			.unwrap();
 
 		if response.code != 200 {
-			println!("Unexpected http request status code: {}", response.code);
+			log::info!("Unexpected http request status code: {}", response.code);
 			// return Err(<Error<T>>::HttpFetchingError)
 		}
 
 		let resp_bytes = response.body().collect::<Vec<u8>>();
-		let resp_str = std::str::from_utf8(&resp_bytes).unwrap();
+		let resp_str = str::from_utf8(&resp_bytes).unwrap();
 		let res: JsonRpcResult = serde_json::from_str(&resp_str).unwrap();
 		if let NearRpcResult::NextBlock(block) = res.result {
 			block
@@ -192,7 +196,7 @@ mod tests {
 		assert_eq!(json_rpc.jsonrpc, "2.0");
 		assert_eq!(json_rpc.method, "next_light_client_block");
 		let req = serde_json::to_string(&json_rpc).unwrap();
-		println!("{}", req);
+		log::info!("{}", req);
 		assert_eq!(
 			req,
 			r#"{"jsonrpc":"2.0","method":"next_light_client_block","params":{"last_block_hash":"2rs9o3B6nAQ3pEfVcBQdLnBqZrfpVuZJeKC8FpTshhua"},"id":"pallet-near"}"#
@@ -214,7 +218,7 @@ mod tests {
 		assert_eq!(json_rpc.jsonrpc, "2.0");
 		assert_eq!(json_rpc.method, "EXPERIMENTAL_light_client_proof");
 		let req = serde_json::to_string(&json_rpc).unwrap();
-		println!("{}", req);
+		log::info!("{}", req);
 		assert_eq!(
 			req,
 			r#"{"jsonrpc":"2.0","method":"EXPERIMENTAL_light_client_proof","params":{"type":"receipt","receipt_id":"5TGZe4jsuUGx9A65HNuEMkb3J4vW6Wo2pxDbyzYFrDeC","receiver_id":"7496c752687339dbd12c68535011a8994cfa727f3263bdb65fc879063c4b365a","light_client_head":"14gQvvYkY2MrKxikmSoEF5nmgwnrQZqU6kmfxdaSSS88"},"id":"pallet-near"}"#

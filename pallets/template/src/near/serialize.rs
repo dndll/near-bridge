@@ -1,31 +1,23 @@
 pub mod base64_format {
-	use serde::{de, Deserialize, Deserializer, Serializer};
+	use base64::{decode, encode};
+	use borsh::maybestd::string::String;
+	use serde::{Deserialize, Deserializer, Serialize, Serializer};
+	use sp_runtime::sp_std::{prelude::*, vec};
 
-	pub fn to_base64<T: AsRef<[u8]>>(input: T) -> String {
-		base64::encode(&input)
-	}
-
-	pub fn from_base64(s: &str) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-		base64::decode(s).map_err(|err| err.into())
-	}
-
-	pub fn serialize<S, T>(data: T, serializer: S) -> Result<S::Ok, S::Error>
+	pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
 	where
 		S: Serializer,
-		T: AsRef<[u8]>,
 	{
-		serializer.serialize_str(&to_base64(data))
+		let encoded = encode(bytes);
+		serializer.serialize_str(&encoded)
 	}
 
-	pub fn deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+	pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
 	where
 		D: Deserializer<'de>,
-		T: From<Vec<u8>>,
 	{
-		let s = String::deserialize(deserializer)?;
-		from_base64(&s)
-			.map_err(|err| de::Error::custom(err.to_string()))
-			.map(Into::into)
+		let encoded_str = String::deserialize(deserializer)?;
+		decode(&encoded_str).map_err(serde::de::Error::custom)
 	}
 }
 
@@ -36,9 +28,11 @@ pub mod base64_format {
 /// deserialising, strings are parsed as decimal numbers while numbers are
 /// interpreted as is.
 pub mod dec_format {
+	use borsh::maybestd::string::String;
 	use serde::{de, Deserializer, Serializer};
+	use sp_runtime::sp_std::{prelude::*, vec};
 
-	#[derive(thiserror::Error, Debug)]
+	#[derive(thiserror_no_std::Error, Debug)]
 	#[error("cannot parse from unit")]
 	pub struct ParseUnitError;
 
@@ -54,7 +48,7 @@ pub mod dec_format {
 		}
 
 		/// Tries to parse decimal string as an integer.
-		fn try_from_str(value: &str) -> Result<Self, std::num::ParseIntError>;
+		fn try_from_str(value: &str) -> Result<Self, core::num::ParseIntError>;
 
 		/// Constructs Self from a 64-bit unsigned integer.
 		fn from_u64(value: u64) -> Self;
@@ -64,7 +58,7 @@ pub mod dec_format {
 		fn serialize(&self) -> Option<String> {
 			Some(self.to_string())
 		}
-		fn try_from_str(value: &str) -> Result<Self, std::num::ParseIntError> {
+		fn try_from_str(value: &str) -> Result<Self, core::num::ParseIntError> {
 			Self::from_str_radix(value, 10)
 		}
 		fn from_u64(value: u64) -> Self {
@@ -76,7 +70,7 @@ pub mod dec_format {
 		fn serialize(&self) -> Option<String> {
 			Some(self.to_string())
 		}
-		fn try_from_str(value: &str) -> Result<Self, std::num::ParseIntError> {
+		fn try_from_str(value: &str) -> Result<Self, core::num::ParseIntError> {
 			Self::from_str_radix(value, 10)
 		}
 		fn from_u64(value: u64) -> Self {
@@ -91,7 +85,7 @@ pub mod dec_format {
 		fn try_from_unit() -> Result<Self, ParseUnitError> {
 			Ok(None)
 		}
-		fn try_from_str(value: &str) -> Result<Self, std::num::ParseIntError> {
+		fn try_from_str(value: &str) -> Result<Self, core::num::ParseIntError> {
 			Some(T::try_from_str(value)).transpose()
 		}
 		fn from_u64(value: u64) -> Self {
@@ -104,7 +98,7 @@ pub mod dec_format {
 	impl<'de, T: DecType> de::Visitor<'de> for Visitor<T> {
 		type Value = T;
 
-		fn expecting(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+		fn expecting(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
 			fmt.write_str("a non-negative integer as a string")
 		}
 
