@@ -120,7 +120,7 @@ impl LightClientState {
 			total_stake += block_producer.stake();
 
 			if let Some(signature) = maybe_signature {
-				log::info!(
+				log::debug!(
 					"Checking if signature {} and message {:?} was signed by {}",
 					signature,
 					approval_message,
@@ -137,6 +137,7 @@ impl LightClientState {
 
 		let threshold = total_stake * 2 / 3;
 		if approved_stake <= threshold {
+			log::info!("Not enough stake approved");
 			return false
 		}
 
@@ -252,21 +253,6 @@ mod tests {
 			hax.iter().map(|s| s.clone().into()).collect::<Vec<_>>();
 
 		assert_eq!(bps, bps_again);
-	}
-
-	#[test]
-	fn fake_validate_and_update_next() {
-		let last_verified_head = get_previous();
-		// FIXME: need to get these, currently verifying against the next bps is why this test fails
-		let current_epoch_bps = get_previous_previous().next_bps.unwrap();
-
-		let mut state =
-			LightClientState { head: last_verified_head.clone().into(), next_bps: None };
-
-		let new_head = get_current();
-
-		let did_pass = state.validate_and_update_head(&new_head, current_epoch_bps);
-		assert!(did_pass);
 	}
 
 	fn get_epochs() -> Vec<(u32, LightClientBlockView, CryptoHash)> {

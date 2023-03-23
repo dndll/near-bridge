@@ -107,19 +107,13 @@ pub mod pallet {
 			} else {
 				// Bootstrap here
 				log::info!("Bootstrapping light client");
+				let start_block_hash = "BoswxxbPApgouVZNH37jKo6PF9WgrcqqgYjEW8tdXXPU";
 
-				let where_to_get_bps_for_start = "BoswxxbPApgouVZNH37jKo6PF9WgrcqqgYjEW8tdXXPU";
-				let bps =
-					NearRpcClient.fetch_latest_header(where_to_get_bps_for_start).next_bps.unwrap();
-				log::info!("Got block producers: {:?}", bps);
-
-				// decide when to start from
 				// get current block and store in `Started`
-				let start_block_hash = "61dCmpAvCMDMfjsgXejpmpMZpLFhBkUbhCY8QVbdZEai";
 				let starting_head = NearRpcClient.fetch_latest_header(start_block_hash);
 				log::info!("Got starting head: {:?}", starting_head);
-				// get epoch head
-				// get epoch - 1 block producers
+
+				let bps = starting_head.next_bps.clone().unwrap();
 				let state = LightClientState { head: starting_head.into(), next_bps: None };
 				(state, bps)
 			};
@@ -149,6 +143,7 @@ pub mod pallet {
 				let new_head = NearRpcClient.fetch_latest_header(&format!("{}", state.head.hash()));
 
 				if state.validate_and_update_head(&new_head, bps) {
+					log::info!("Storing new head: {:?}", new_head.inner_lite.height);
 					LightClientHead::<T>::put(state.head);
 				}
 				if let Some((epoch, next_bps)) = state.next_bps {
