@@ -47,11 +47,12 @@ thiserror = { version = "*", default-features = false }
 thiserror-no-std = { version = "*", default-features = false }
 secp256k1 = { version = "0.27.0", default-features = false, features = [
 	"recovery",
+	"alloc",
 ] }
 ed25519-dalek = { version = "1.0.1", default-features = false, features = [
 	"u64_backend",
 ] }
-rand = { version = "0.8.5", optional = true, features = ["small_rng"] }
+once_cell = { version = "1.17.0", default-features = false }
 base64 = { version = "0.21.0", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
@@ -71,9 +72,9 @@ std = [
 	"serde/std",
 	"secp256k1/std",
 	"ed25519-dalek/std",
+	"once_cell/std",
 	"serde_json/std",
 	"sha2/std",
-	"rand/std",
 	"bs58/std",
 	"borsh/std",
 	"base64/std",

@@ -29,6 +29,7 @@ pub mod base64_format {
 /// interpreted as is.
 pub mod dec_format {
 	use borsh::maybestd::string::String;
+	use codec::alloc::string::ToString;
 	use serde::{de, Deserializer, Serializer};
 	use sp_runtime::sp_std::{prelude::*, vec};
 

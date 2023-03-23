@@ -1,5 +1,6 @@
 use crate::near::views::LightClientBlockView;
 use borsh::maybestd::string::String;
+use codec::alloc::string::ToString;
 use serde::{Deserialize, Serialize};
 use sp_runtime::{
 	offchain::{
@@ -153,7 +154,7 @@ impl NearRpcClient {
 		}
 
 		let resp_bytes = response.body().collect::<Vec<u8>>();
-		let resp_str = str::from_utf8(&resp_bytes).unwrap();
+		let resp_str = core::str::from_utf8(&resp_bytes).unwrap();
 		let res: JsonRpcResult = serde_json::from_str(&resp_str).unwrap();
 		if let NearRpcResult::NextBlock(block) = res.result {
 			block

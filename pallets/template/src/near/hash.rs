@@ -1,4 +1,4 @@
-use borsh::BorshSerialize;
+use borsh::{maybestd::io::Write, BorshSerialize};
 use core::{
 	fmt,
 	hash::{Hash, Hasher},
@@ -51,33 +51,9 @@ impl CryptoHash {
 	/// a representation of a `[u32; 3]` array rather than a slice.  It may be
 	/// cleaner to use [`Self::hash_borsh_iter`] instead.
 	pub fn hash_borsh<T: BorshSerialize>(value: T) -> CryptoHash {
-		let mut hasher = sha2::Sha256::default();
-		value.serialize(&mut hasher).unwrap();
-		CryptoHash(hasher.finalize().into())
-	}
-
-	/// Calculates hash of a borsh-serialised representation of list of objects.
-	///
-	/// This behaves as if it first collected all the items in the iterator into
-	/// a vector and then calculating hash of borsh-serialised representation of
-	/// that vector.
-	///
-	/// Panics if the iterator lies about its length.
-	pub fn hash_borsh_iter<I>(values: I) -> CryptoHash
-	where
-		I: IntoIterator,
-		I::IntoIter: ExactSizeIterator,
-		I::Item: BorshSerialize,
-	{
-		let iter = values.into_iter();
-		let n = u32::try_from(iter.len()).unwrap();
-		let mut hasher = sha2::Sha256::default();
-		hasher.write_all(&n.to_le_bytes()).unwrap();
-		let count = iter
-			.inspect(|value| BorshSerialize::serialize(&value, &mut hasher).unwrap())
-			.count();
-		assert_eq!(n as usize, count);
-		CryptoHash(hasher.finalize().into())
+		let mut bytes = Vec::new();
+		value.serialize(&mut bytes).unwrap();
+		CryptoHash(sha2::Sha256::digest(bytes).into())
 	}
 
 	pub const fn as_bytes(&self) -> &[u8; 32] {
@@ -95,7 +71,7 @@ impl CryptoHash {
 		// enough.
 		let mut buffer = [0u8; 45];
 		let len = bs58::encode(self).into(&mut buffer[..]).unwrap();
-		let value = str::from_utf8(&buffer[..len]).unwrap();
+		let value = core::str::from_utf8(&buffer[..len]).unwrap();
 		visitor(value)
 	}
 
@@ -179,7 +155,7 @@ impl core::str::FromStr for CryptoHash {
 		match Self::from_base58_impl(encoded) {
 			Decode58Result::Ok(result) => Ok(result),
 			Decode58Result::BadLength => Err("incorrect length for hash".into()),
-			Decode58Result::Err(err) => Err(err.into()),
+			Decode58Result::Err(err) => Err("BS58 decoding error".into()),
 		}
 	}
 }

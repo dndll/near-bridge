@@ -9,6 +9,14 @@ pub enum ParseKeyTypeError {
 	UnknownKeyType { unknown_key_type: String },
 }
 
+impl Into<&str> for ParseKeyTypeError {
+	fn into(self) -> &'static str {
+		match self {
+			Self::UnknownKeyType { .. } => "UnknownKeyType",
+		}
+	}
+}
+
 #[derive(Debug, Clone, thiserror_no_std::Error)]
 pub enum ParseKeyError {
 	#[error("unknown key type '{unknown_key_type}'")]
@@ -17,6 +25,16 @@ pub enum ParseKeyError {
 	InvalidLength { expected_length: usize, received_length: usize },
 	#[error("invalid key data: {error_message}")]
 	InvalidData { error_message: String },
+}
+
+impl Into<&str> for ParseKeyError {
+	fn into(self) -> &'static str {
+		match self {
+			Self::UnknownKeyType { .. } => "UnknownKeyType",
+			Self::InvalidLength { .. } => "InvalidLength",
+			Self::InvalidData { .. } => "InvalidData",
+		}
+	}
 }
 
 impl From<ParseKeyTypeError> for ParseKeyError {
