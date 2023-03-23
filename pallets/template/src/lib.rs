@@ -156,19 +156,33 @@ pub mod pallet {
 				//   retrieve it. If there are multiple keys and we want to pinpoint it,
 				// `with_filter()` can be chained,   ref: https://substrate.dev/rustdocs/v3.0.0/frame_system/offchain/struct.Signer.html
 				let signer = Signer::<T, T::AuthorityId>::any_account();
+				if !signer.can_sign() {
+					panic!(
+						"No local accounts available. Consider adding one via
+					`author_insertKey` RPC."
+					);
+				}
 
 				if state.validate_and_update_head(&new_head, bps) {
 					// Self::submit_header(OriginFor::<T>::root(), state.head);
-					signer.send_signed_transaction(|_acct| Call::submit_header {
-						head: state.head.clone(),
-					});
+					signer
+						.send_signed_transaction(|_acct| Call::submit_header {
+							head: state.head.clone(),
+						})
+						.unwrap()
+						.1
+						.unwrap();
 				}
 				if let Some((epoch, next_bps)) = state.next_bps {
 					// Self::submit_bps(OriginFor::<T>::root(), epoch, next_bps);
-					signer.send_signed_transaction(|_acct| Call::submit_bps {
-						epoch,
-						next_bps: next_bps.clone(),
-					});
+					signer
+						.send_signed_transaction(|_acct| Call::submit_bps {
+							epoch,
+							next_bps: next_bps.clone(),
+						})
+						.unwrap()
+						.1
+						.unwrap();
 				}
 			} else {
 				// TODO: start verifying from front of queue
