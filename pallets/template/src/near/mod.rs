@@ -157,8 +157,10 @@ impl LightClientState {
 				next_bps.into_iter().map(|s| s.clone().into()).collect(),
 			));
 		}
+		log::info!("Previous head: {}", self.head.inner_lite.height);
 
 		self.head = LightClientBlockLiteView::from(block_view.to_owned());
+		log::info!("New head: {}", self.head.inner_lite.height);
 
 		true
 	}

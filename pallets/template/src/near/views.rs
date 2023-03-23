@@ -72,6 +72,8 @@ impl From<BlockHeaderInnerLite> for BlockHeaderInnerLiteView {
 	codec::Encode,
 	codec::Decode,
 	scale_info::TypeInfo,
+	PartialEq,
+	Eq,
 )]
 pub struct LightClientBlockLiteView {
 	pub prev_block_hash: CryptoHash,

@@ -9,6 +9,7 @@ pub use pallet::*;
 #[cfg(test)]
 mod mock;
 
+pub mod crypto;
 mod near;
 
 #[cfg(test)]
@@ -27,8 +28,11 @@ pub mod pallet {
 		LightClientState,
 	};
 	use borsh::maybestd::format;
-	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
+	use frame_support::{pallet_prelude::*, traits::OriginTrait};
+	use frame_system::{
+		offchain::{AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer},
+		pallet_prelude::*,
+	};
 	use sp_runtime::{
 		offchain::{
 			storage_lock::{BlockAndTime, StorageLock},
@@ -46,9 +50,14 @@ pub mod pallet {
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
+		/// The identifier type for an offchain worker.
+		type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
+
+		type Call: From<Call<Self>>;
 	}
 
 	#[pallet::storage]
@@ -111,7 +120,7 @@ pub mod pallet {
 
 				// get current block and store in `Started`
 				let starting_head = NearRpcClient.fetch_latest_header(start_block_hash);
-				log::info!("Got starting head: {:?}", starting_head);
+				log::info!("Got starting head: {:?}", starting_head.inner_lite.height);
 
 				let bps = starting_head.next_bps.clone().unwrap();
 				let state = LightClientState { head: starting_head.into(), next_bps: None };
@@ -142,16 +151,24 @@ pub mod pallet {
 				// TODO: if so start verifying from queue
 				let new_head = NearRpcClient.fetch_latest_header(&format!("{}", state.head.hash()));
 
+				// We retrieve a signer and check if it is valid.
+				//   Since this pallet only has one key in the keystore. We use `any_account()1 to
+				//   retrieve it. If there are multiple keys and we want to pinpoint it,
+				// `with_filter()` can be chained,   ref: https://substrate.dev/rustdocs/v3.0.0/frame_system/offchain/struct.Signer.html
+				let signer = Signer::<T, T::AuthorityId>::any_account();
+
 				if state.validate_and_update_head(&new_head, bps) {
-					log::info!("Storing new head: {:?}", new_head.inner_lite.height);
-					LightClientHead::<T>::put(state.head);
+					// Self::submit_header(OriginFor::<T>::root(), state.head);
+					signer.send_signed_transaction(|_acct| Call::submit_header {
+						head: state.head.clone(),
+					});
 				}
 				if let Some((epoch, next_bps)) = state.next_bps {
-					let next_bps: BoundedVec<
-						ValidatorStakeViewScaleHax,
-						ConstU32<MAX_BLOCK_PRODUCERS>,
-					> = BoundedVec::try_from(next_bps).unwrap();
-					BlockProducersByEpoch::<T>::insert(epoch, next_bps)
+					// Self::submit_bps(OriginFor::<T>::root(), epoch, next_bps);
+					signer.send_signed_transaction(|_acct| Call::submit_bps {
+						epoch,
+						next_bps: next_bps.clone(),
+					});
 				}
 			} else {
 				// TODO: start verifying from front of queue
@@ -160,56 +177,87 @@ pub mod pallet {
 		}
 	}
 
+	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Check if we have fetched the data before. If yes, we can use the cached version
 		///   stored in off-chain worker storage `storage`. If not, we fetch the remote info and
 		///   write the info into the storage for future retrieval.
-		fn fetch_remote_info() -> Result<(), Error<T>> {
-			// // Create a reference to Local Storage value.
-			// // Since the local storage is common for all offchain workers, it's a good practice
-			// // to prepend our entry with the pallet name.
-			// let s_info = StorageValueRef::persistent(b"near::hn-info");
+		// fn fetch_remote_info() -> Result<(), Error<T>> {
+		// // Create a reference to Local Storage value.
+		// // Since the local storage is common for all offchain workers, it's a good practice
+		// // to prepend our entry with the pallet name.
+		// let s_info = StorageValueRef::persistent(b"near::hn-info");
 
-			// // Local storage is persisted and shared between runs of the offchain workers,
-			// // offchain workers may run concurrently. We can use the `mutate` function to
-			// // write a storage entry in an atomic fashion.
-			// //
-			// // With a similar API as `StorageValue` with the variables `get`, `set`, `mutate`.
-			// // We will likely want to use `mutate` to access
-			// // the storage comprehensively.
-			// //
-			// if let Ok(Some(info)) = s_info.get::<HackerNewsInfo>() {
-			// 	// hn-info has already been fetched. Return early.
-			// 	log::info!("cached hn-info: {:?}", info);
-			// 	return Ok(())
-			// }
+		// // Local storage is persisted and shared between runs of the offchain workers,
+		// // offchain workers may run concurrently. We can use the `mutate` function to
+		// // write a storage entry in an atomic fashion.
+		// //
+		// // With a similar API as `StorageValue` with the variables `get`, `set`, `mutate`.
+		// // We will likely want to use `mutate` to access
+		// // the storage comprehensively.
+		// //
+		// if let Ok(Some(info)) = s_info.get::<HackerNewsInfo>() {
+		// 	// hn-info has already been fetched. Return early.
+		// 	log::info!("cached hn-info: {:?}", info);
+		// 	return Ok(())
+		// }
 
-			// // Since off-chain storage can be accessed by off-chain workers from multiple runs,
-			// it // is important to lock   it before doing heavy computations or write operations.
-			// //
-			// // There are four ways of defining a lock:
-			// //   1) `new` - lock with default time and block exipration
-			// //   2) `with_deadline` - lock with default block but custom time expiration
-			// //   3) `with_block_deadline` - lock with default time but custom block expiration
-			// //   4) `with_block_and_time_deadline` - lock with custom time and block expiration
-			// // Here we choose the most custom one for demonstration purpose.
-			// let mut lock = StorageLock::<BlockAndTime<Self>>::with_block_and_time_deadline(
-			// 	b"near::lock",
-			// 	LOCK_BLOCK_EXPIRATION,
-			// 	Duration::from_millis(LOCK_TIMEOUT_EXPIRATION),
-			// );
+		// // Since off-chain storage can be accessed by off-chain workers from multiple runs,
+		// it // is important to lock   it before doing heavy computations or write operations.
+		// //
+		// // There are four ways of defining a lock:
+		// //   1) `new` - lock with default time and block exipration
+		// //   2) `with_deadline` - lock with default block but custom time expiration
+		// //   3) `with_block_deadline` - lock with default time but custom block expiration
+		// //   4) `with_block_and_time_deadline` - lock with custom time and block expiration
+		// // Here we choose the most custom one for demonstration purpose.
+		// let mut lock = StorageLock::<BlockAndTime<Self>>::with_block_and_time_deadline(
+		// 	b"near::lock",
+		// 	LOCK_BLOCK_EXPIRATION,
+		// 	Duration::from_millis(LOCK_TIMEOUT_EXPIRATION),
+		// );
 
-			// // We try to acquire the lock here. If failed, we know the `fetch_n_parse` part
-			// inside // is being   executed by previous run of ocw, so the function just returns.
-			// if let Ok(_guard) = lock.try_lock() {
-			// 	match Self::fetch_n_parse() {
-			// 		Ok(info) => {
-			// 			s_info.set(&info);
-			// 		},
-			// 		Err(err) => return Err(err),
-			// 	}
-			// }
-			Ok(())
+		// // We try to acquire the lock here. If failed, we know the `fetch_n_parse` part
+		// inside // is being   executed by previous run of ocw, so the function just returns.
+		// if let Ok(_guard) = lock.try_lock() {
+		// 	match Self::fetch_n_parse() {
+		// 		Ok(info) => {
+		// 			s_info.set(&info);
+		// 		},
+		// 		Err(err) => return Err(err),
+		// 	}
+		// }
+		// Ok(())
+		// }
+		#[pallet::weight(0)]
+		#[pallet::call_index(0)]
+		pub fn submit_header(
+			origin: OriginFor<T>,
+			head: LightClientBlockLiteView,
+		) -> DispatchResultWithPostInfo {
+			let _who = ensure_root(origin)?;
+
+			log::info!("Storing new head: {:?}", head);
+			LightClientHead::<T>::put(head);
+
+			Ok(().into())
+		}
+
+		#[pallet::weight(0)]
+		#[pallet::call_index(1)]
+		pub fn submit_bps(
+			origin: OriginFor<T>,
+			epoch: CryptoHash,
+			next_bps: Vec<ValidatorStakeViewScaleHax>,
+		) -> DispatchResultWithPostInfo {
+			let _who = ensure_root(origin)?;
+
+			log::info!("Storing bps: {:?}", next_bps.len());
+			let next_bps: BoundedVec<ValidatorStakeViewScaleHax, ConstU32<MAX_BLOCK_PRODUCERS>> =
+				BoundedVec::try_from(next_bps).unwrap();
+			BlockProducersByEpoch::<T>::insert(epoch, next_bps);
+
+			Ok(().into())
 		}
 	}
 }
