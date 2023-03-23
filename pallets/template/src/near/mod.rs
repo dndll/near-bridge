@@ -15,6 +15,7 @@ use sp_runtime::sp_std::{prelude::*, vec};
 
 pub mod block_header;
 pub mod client;
+pub mod errors;
 pub mod hash;
 pub mod merkle;
 pub mod proof;
@@ -22,7 +23,6 @@ pub mod serialize;
 pub mod signature;
 pub mod types;
 pub mod views;
-pub mod errors;
 
 #[derive(Debug, Clone, Encode, Decode, scale_info::TypeInfo)]
 pub struct LightClientState {
@@ -173,9 +173,9 @@ mod tests {
 		views::BlockHeaderInnerLiteView,
 		*,
 	};
+	use crate::near::signature::{KeyType, Signature};
 	use borsh::{BorshDeserialize, BorshSerialize};
 	use ed25519_dalek::Verifier;
-	use near_crypto::{KeyType, Signature};
 	use serde_json;
 	use sp_core::bytes::from_hex;
 

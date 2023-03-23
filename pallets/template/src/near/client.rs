@@ -174,7 +174,8 @@ mod tests {
 	};
 
 	fn get_response() -> JsonRpcResult {
-		serde_json::from_reader(std::fs::File::open("fixtures/next.json").unwrap()).unwrap()
+		serde_json::from_reader(std::fs::File::open("fixtures/1_current_epoch.json").unwrap())
+			.unwrap()
 	}
 
 	#[test]

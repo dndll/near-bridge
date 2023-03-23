@@ -338,7 +338,7 @@ impl SecretKey {
 	pub fn from_random(key_type: KeyType) -> SecretKey {
 		match key_type {
 			KeyType::ED25519 => {
-				let keypair = ed25519_dalek::Keypair::generate(&mut OsRng);
+				let keypair = ed25519_dalek::Keypair::generate(&mut rand::rngs::OsRng);
 				SecretKey::ED25519(ED25519SecretKey(keypair.to_bytes()))
 			},
 			KeyType::SECP256K1 =>
@@ -813,7 +813,7 @@ mod tests {
 
 	#[test]
 	fn test_json_serialize_ed25519() {
-		let sk = SecretKey::from_seed(KeyType::ED25519, "test");
+		let sk = SecretKey::from_random(KeyType::ED25519);
 		let pk = sk.public_key();
 		let expected = "\"ed25519:DcA2MzgpJbrUATQLLceocVckhhAqrkingax4oJ9kZ847\"";
 		assert_eq!(serde_json::to_string(&pk).unwrap(), expected);
@@ -843,7 +843,7 @@ mod tests {
 		use sha2::Digest;
 		let data = sha2::Sha256::digest(b"123").to_vec();
 
-		let sk = SecretKey::from_seed(KeyType::SECP256K1, "test");
+		let sk = SecretKey::from_random(KeyType::SECP256K1);
 		let pk = sk.public_key();
 		let expected = "\"secp256k1:5ftgm7wYK5gtVqq1kxMGy7gSudkrfYCbpsjL6sH1nwx2oj5NR2JktohjzB6fbEhhRERQpiwJcpwnQjxtoX3GS3cQ\"";
 		assert_eq!(serde_json::to_string(&pk).unwrap(), expected);
@@ -869,7 +869,7 @@ mod tests {
 		use sha2::Digest;
 		let data = sha2::Sha256::digest(b"123").to_vec();
 		for key_type in [KeyType::ED25519, KeyType::SECP256K1] {
-			let sk = SecretKey::from_seed(key_type, "test");
+			let sk = SecretKey::from_random(key_type);
 			let pk = sk.public_key();
 			let bytes = pk.try_to_vec().unwrap();
 			assert_eq!(PublicKey::try_from_slice(&bytes).unwrap(), pk);

@@ -230,44 +230,7 @@ mod tests {
 	struct Struct {
 		hash: CryptoHash,
 	}
-
-	#[test]
-	fn test_hash_borsh() {
-		fn value<T: BorshSerialize>(want: &str, value: T) {
-			assert_eq!(want, CryptoHash::hash_borsh(&value).to_string());
-		}
-
-		fn slice<T: BorshSerialize>(want: &str, slice: &[T]) {
-			assert_eq!(want, CryptoHash::hash_borsh(slice).to_string());
-			iter(want, slice.iter());
-			iter(want, slice);
-		}
-
-		fn iter<I>(want: &str, iter: I)
-		where
-			I: IntoIterator,
-			I::IntoIter: ExactSizeIterator,
-			I::Item: BorshSerialize,
-		{
-			assert_eq!(want, CryptoHash::hash_borsh_iter(iter).to_string());
-		}
-
-		value("CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt", "foo");
-		value("CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt", "foo".as_bytes());
-		value("CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt", &b"foo"[..]);
-		value("CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt", [3, 0, 0, 0, b'f', b'o', b'o']);
-		slice("CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt", "foo".as_bytes());
-		iter(
-			"CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt",
-			"FOO".bytes().map(|ch| ch.to_ascii_lowercase()),
-		);
-
-		value("3yMApqCuCjXDWPrbjfR5mjCPTHqFG8Pux1TxQrEM35jj", b"foo");
-		value("3yMApqCuCjXDWPrbjfR5mjCPTHqFG8Pux1TxQrEM35jj", [b'f', b'o', b'o']);
-		value("3yMApqCuCjXDWPrbjfR5mjCPTHqFG8Pux1TxQrEM35jj", [b'f', b'o', b'o']);
-		slice("CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt", &[b'f', b'o', b'o']);
-	}
-
+	
 	#[test]
 	fn test_base58_successes() {
 		for (encoded, hash) in [

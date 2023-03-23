@@ -48,6 +48,7 @@ thiserror-no-std = { version = "*", default-features = false }
 secp256k1 = { version = "0.27.0", default-features = false, features = [
 	"recovery",
 	"alloc",
+	"rand",
 ] }
 ed25519-dalek = { version = "1.0.1", default-features = false, features = [
 	"u64_backend",
@@ -57,7 +58,7 @@ base64 = { version = "0.21.0", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 sp-io = { version = "7.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.37" }
-rand = "0.8.4"
+rand = "0.7.3"
 
 [features]
 default = ["std"]
