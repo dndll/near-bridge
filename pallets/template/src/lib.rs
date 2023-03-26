@@ -30,7 +30,10 @@ pub mod pallet {
 	use borsh::maybestd::format;
 	use frame_support::pallet_prelude::*;
 	use frame_system::{
-		offchain::{AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer},
+		offchain::{
+			AppCrypto, CreateSignedTransaction, SendSignedTransaction, SendUnsignedTransaction,
+			Signer,
+		},
 		pallet_prelude::*,
 	};
 	use sp_runtime::{
@@ -87,6 +90,40 @@ pub mod pallet {
 		NoneValue,
 		/// Errors should have helpful documentation associated with them.
 		StorageOverflow,
+	}
+
+	#[pallet::validate_unsigned]
+	impl<T: Config> ValidateUnsigned for Pallet<T> {
+		type Call = Call<T>;
+
+		/// Validate unsigned call to this module.
+		///
+		/// By default unsigned transactions are disallowed, but implementing the validator
+		/// here we make sure that some particular calls (the ones produced by offchain worker)
+		/// are being whitelisted and marked as valid.
+		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+			// Firstly let's check that we call the right function.
+			if let Call::submit { head, bps } = call {
+				// let signature_valid =
+				// 	SignedPayload::<T>::verify::<T::AuthorityId>(payload, signature.clone());
+				// if !signature_valid {
+				// 	return InvalidTransaction::BadProof.into()
+				// }
+				// Self::validate_transaction_parameters(&payload.block_number, &payload.price)
+				Ok(ValidTransaction {
+					priority: 1,
+					requires: sp_runtime::sp_std::vec![],
+					provides: sp_runtime::sp_std::vec![],
+					longevity: 1,
+					propagate: false,
+				})
+			} else {
+				InvalidTransaction::Call.into()
+			}
+			// else if let Call::submit_price_unsigned { block_number, price: new_price } = call {
+			// 	Self::validate_transaction_parameters(block_number, new_price)
+			// }
+		}
 	}
 
 	#[pallet::hooks]
@@ -259,10 +296,23 @@ pub mod pallet {
 			bps: Option<(CryptoHash, Vec<ValidatorStakeViewScaleHax>)>,
 		) -> DispatchResult {
 			if let Some(head) = head {
-				Self::submit_header(origin.clone(), head)?
+				log::info!("Received request to submit head {}", head.inner_lite.height);
+				LightClientHead::<T>::put(head);
+
+				// Self::submit_header(origin.clone(), head)?
 			}
 			if let Some((epoch, next_bps)) = bps {
-				Self::submit_bps(origin, epoch, next_bps)?
+				log::info!(
+					"Received request to submit bps of len {} for epoch {:?}",
+					next_bps.len(),
+					epoch
+				);
+				let next_bps: BoundedVec<
+					ValidatorStakeViewScaleHax,
+					ConstU32<MAX_BLOCK_PRODUCERS>,
+				> = BoundedVec::try_from(next_bps).unwrap();
+				BlockProducersByEpoch::<T>::insert(epoch, next_bps);
+				// Self::submit_bps(origin, epoch, next_bps)?
 			}
 			Ok(())
 		}
@@ -284,12 +334,14 @@ pub mod pallet {
 			);
 
 			signer
-				.send_signed_transaction(|_acct| Call::submit {
-					head: head.clone(),
-					bps: bps.clone(),
-				})
+				// .send_signed_transaction(|_acct| Call::submit {
+				// 	head: head.clone(),
+				// 	bps: bps.clone(),
+				// })
+				.submit_unsigned_transaction(Call::submit { head: head.clone(), bps: bps.clone() })
 				.ok_or("Failed to send request")
-				.map(|x| x.1.unwrap())
+				// .map(|x| x.1.unwrap())
+				.map(|x| x.unwrap())
 				.map_err(|e| e.into())
 		}
 	}
