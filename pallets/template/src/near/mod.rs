@@ -75,9 +75,9 @@ impl LightClientState {
 		let approval_message =
 			cvec!(borshit(&endorsement), (block_view.inner_lite.height + 2).to_le_bytes());
 
-		log::info!("Current block hash: {}", current_block_hash);
-		log::info!("Next block hash: {}", next_block_hash);
-		log::info!("Approval message: {:?}", approval_message);
+		log::debug!("Current block hash: {}", current_block_hash);
+		log::debug!("Next block hash: {}", next_block_hash);
+		log::debug!("Approval message: {:?}", approval_message);
 		(*current_block_hash.as_bytes(), next_block_hash.into(), approval_message)
 	}
 
@@ -128,16 +128,16 @@ impl LightClientState {
 				);
 				approved_stake += block_producer.stake();
 				if !signature.verify(&approval_message, &block_producer.public_key()) {
-					log::info!("Signature is invalid");
+					log::warn!("Signature is invalid");
 					return false
 				}
 			}
 		}
-		log::info!("All signatures are valid");
+		log::debug!("All signatures are valid");
 
 		let threshold = total_stake * 2 / 3;
 		if approved_stake <= threshold {
-			log::info!("Not enough stake approved");
+			log::warn!("Not enough stake approved");
 			return false
 		}
 
@@ -145,7 +145,7 @@ impl LightClientState {
 		if let Some(next_bps) = &block_view.next_bps {
 			let next_bps_hash = CryptoHash::hash_borsh(&next_bps);
 			if next_bps_hash != block_view.inner_lite.next_bp_hash {
-				log::info!("Next block producers hash is invalid");
+				log::warn!("Next block producers hash is invalid");
 				return false
 			}
 
@@ -154,10 +154,11 @@ impl LightClientState {
 				next_bps.into_iter().map(|s| s.clone().into()).collect(),
 			));
 		}
-		log::info!("Previous head: {}", self.head.inner_lite.height);
 
+		let prev_head = self.head.inner_lite.height;
 		self.head = LightClientBlockLiteView::from(block_view.to_owned());
-		log::info!("New head: {}", self.head.inner_lite.height);
+		let new_head = self.head.inner_lite.height;
+		log::info!("prev/current head: {}/{}", prev_head, new_head);
 
 		true
 	}
