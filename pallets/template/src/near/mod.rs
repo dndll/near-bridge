@@ -144,16 +144,13 @@ impl LightClientState {
 		// (6)
 		if let Some(next_bps) = &block_view.next_bps {
 			let next_bps_hash = CryptoHash::hash_borsh(&next_bps);
-			log::info!("Next block producers calculated hash: {}", next_bps_hash);
-			log::info!("Next block producers hash: {}", block_view.inner_lite.next_bp_hash);
-
 			if next_bps_hash != block_view.inner_lite.next_bp_hash {
 				log::info!("Next block producers hash is invalid");
 				return false
 			}
 
 			self.next_bps = Some((
-				block_view.inner_lite.next_epoch_id,
+				self.head.inner_lite.next_epoch_id,
 				next_bps.into_iter().map(|s| s.clone().into()).collect(),
 			));
 		}
