@@ -1,6 +1,7 @@
+use crate::near::signature::{ED25519PublicKey, PublicKey, Secp256K1PublicKey, Signature};
 use borsh::{BorshDeserialize, BorshSerialize};
 use codec::{Decode, Encode};
-use near_crypto::{ED25519PublicKey, PublicKey, Secp256K1PublicKey, Signature};
+use sp_runtime::sp_std::{prelude::*, vec};
 
 use super::{
 	block_header::BlockHeaderInnerLite,
@@ -71,6 +72,8 @@ impl From<BlockHeaderInnerLite> for BlockHeaderInnerLiteView {
 	codec::Encode,
 	codec::Decode,
 	scale_info::TypeInfo,
+	PartialEq,
+	Eq,
 )]
 pub struct LightClientBlockLiteView {
 	pub prev_block_hash: CryptoHash,
@@ -145,7 +148,7 @@ pub struct ValidatorStakeV1 {
 impl From<ValidatorStakeViewScaleHax> for ValidatorStakeView {
 	fn from(value: ValidatorStakeViewScaleHax) -> Self {
 		ValidatorStakeView::V1(ValidatorStakeV1 {
-			account_id: value.account_id,
+			account_id: borsh::maybestd::string::String::from_utf8(value.account_id).unwrap(),
 			public_key: match value.public_key.len() {
 				32 =>
 					PublicKey::ED25519(ED25519PublicKey::try_from(&value.public_key[..]).unwrap()),
@@ -163,7 +166,7 @@ impl From<ValidatorStakeViewScaleHax> for ValidatorStakeView {
 	Debug, Clone, Eq, PartialEq, codec::Encode, codec::Decode, scale_info::TypeInfo, BorshSerialize,
 )]
 pub struct ValidatorStakeViewScaleHax {
-	pub account_id: AccountId,
+	pub account_id: Vec<u8>,
 	pub public_key: Vec<u8>,
 	pub stake: Balance,
 }
@@ -172,7 +175,7 @@ impl From<ValidatorStakeView> for ValidatorStakeViewScaleHax {
 	fn from(view: ValidatorStakeView) -> Self {
 		match view {
 			ValidatorStakeView::V1(view) => Self {
-				account_id: view.account_id,
+				account_id: view.account_id.into_bytes(),
 				public_key: view.public_key.key_data().to_vec(),
 				stake: view.stake,
 			},

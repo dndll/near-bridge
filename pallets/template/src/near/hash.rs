@@ -1,11 +1,11 @@
-use borsh::BorshSerialize;
-use serde::{Deserializer, Serializer};
-use sha2::Digest;
-use std::{
+use borsh::{maybestd::io::Write, BorshSerialize};
+use core::{
 	fmt,
 	hash::{Hash, Hasher},
-	io::Write,
 };
+use serde::{Deserializer, Serializer};
+use sha2::Digest;
+use sp_runtime::sp_std::{prelude::*, vec};
 
 #[derive(
 	Copy,
@@ -51,33 +51,9 @@ impl CryptoHash {
 	/// a representation of a `[u32; 3]` array rather than a slice.  It may be
 	/// cleaner to use [`Self::hash_borsh_iter`] instead.
 	pub fn hash_borsh<T: BorshSerialize>(value: T) -> CryptoHash {
-		let mut hasher = sha2::Sha256::default();
-		value.serialize(&mut hasher).unwrap();
-		CryptoHash(hasher.finalize().into())
-	}
-
-	/// Calculates hash of a borsh-serialised representation of list of objects.
-	///
-	/// This behaves as if it first collected all the items in the iterator into
-	/// a vector and then calculating hash of borsh-serialised representation of
-	/// that vector.
-	///
-	/// Panics if the iterator lies about its length.
-	pub fn hash_borsh_iter<I>(values: I) -> CryptoHash
-	where
-		I: IntoIterator,
-		I::IntoIter: ExactSizeIterator,
-		I::Item: BorshSerialize,
-	{
-		let iter = values.into_iter();
-		let n = u32::try_from(iter.len()).unwrap();
-		let mut hasher = sha2::Sha256::default();
-		hasher.write_all(&n.to_le_bytes()).unwrap();
-		let count = iter
-			.inspect(|value| BorshSerialize::serialize(&value, &mut hasher).unwrap())
-			.count();
-		assert_eq!(n as usize, count);
-		CryptoHash(hasher.finalize().into())
+		let mut bytes = Vec::new();
+		value.serialize(&mut bytes).unwrap();
+		CryptoHash(sha2::Sha256::digest(bytes).into())
 	}
 
 	pub const fn as_bytes(&self) -> &[u8; 32] {
@@ -95,7 +71,7 @@ impl CryptoHash {
 		// enough.
 		let mut buffer = [0u8; 45];
 		let len = bs58::encode(self).into(&mut buffer[..]).unwrap();
-		let value = std::str::from_utf8(&buffer[..len]).unwrap();
+		let value = core::str::from_utf8(&buffer[..len]).unwrap();
 		visitor(value)
 	}
 
@@ -149,7 +125,7 @@ struct Visitor;
 impl<'de> serde::de::Visitor<'de> for Visitor {
 	type Value = CryptoHash;
 
-	fn expecting(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+	fn expecting(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 		fmt.write_str("base58-encoded 256-bit hash")
 	}
 
@@ -171,21 +147,21 @@ impl<'de> serde::Deserialize<'de> for CryptoHash {
 	}
 }
 
-impl std::str::FromStr for CryptoHash {
-	type Err = Box<dyn std::error::Error + Send + Sync>;
+impl core::str::FromStr for CryptoHash {
+	type Err = Box<dyn core::error::Error + Send + Sync>;
 
 	/// Decodes base58-encoded string into a 32-byte crypto hash.
 	fn from_str(encoded: &str) -> Result<Self, Self::Err> {
 		match Self::from_base58_impl(encoded) {
 			Decode58Result::Ok(result) => Ok(result),
 			Decode58Result::BadLength => Err("incorrect length for hash".into()),
-			Decode58Result::Err(err) => Err(err.into()),
+			Decode58Result::Err(err) => Err("BS58 decoding error".into()),
 		}
 	}
 }
 
 impl TryFrom<&[u8]> for CryptoHash {
-	type Error = Box<dyn std::error::Error + Send + Sync>;
+	type Error = Box<dyn core::error::Error + Send + Sync>;
 
 	fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
 		Ok(CryptoHash(bytes.try_into()?))
@@ -248,48 +224,11 @@ pub fn hash(data: &[u8]) -> CryptoHash {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::str::FromStr;
+	use core::str::FromStr;
 
 	#[derive(serde::Deserialize, serde::Serialize)]
 	struct Struct {
 		hash: CryptoHash,
-	}
-
-	#[test]
-	fn test_hash_borsh() {
-		fn value<T: BorshSerialize>(want: &str, value: T) {
-			assert_eq!(want, CryptoHash::hash_borsh(&value).to_string());
-		}
-
-		fn slice<T: BorshSerialize>(want: &str, slice: &[T]) {
-			assert_eq!(want, CryptoHash::hash_borsh(slice).to_string());
-			iter(want, slice.iter());
-			iter(want, slice);
-		}
-
-		fn iter<I>(want: &str, iter: I)
-		where
-			I: IntoIterator,
-			I::IntoIter: ExactSizeIterator,
-			I::Item: BorshSerialize,
-		{
-			assert_eq!(want, CryptoHash::hash_borsh_iter(iter).to_string());
-		}
-
-		value("CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt", "foo");
-		value("CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt", "foo".as_bytes());
-		value("CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt", &b"foo"[..]);
-		value("CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt", [3, 0, 0, 0, b'f', b'o', b'o']);
-		slice("CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt", "foo".as_bytes());
-		iter(
-			"CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt",
-			"FOO".bytes().map(|ch| ch.to_ascii_lowercase()),
-		);
-
-		value("3yMApqCuCjXDWPrbjfR5mjCPTHqFG8Pux1TxQrEM35jj", b"foo");
-		value("3yMApqCuCjXDWPrbjfR5mjCPTHqFG8Pux1TxQrEM35jj", [b'f', b'o', b'o']);
-		value("3yMApqCuCjXDWPrbjfR5mjCPTHqFG8Pux1TxQrEM35jj", [b'f', b'o', b'o']);
-		slice("CuoNgQBWsXnTqup6FY3UXNz6RRufnYyQVxx8HKZLUaRt", &[b'f', b'o', b'o']);
 	}
 
 	#[test]
