@@ -23,22 +23,19 @@ pub mod pallet {
 	use crate::near::{
 		client::NearRpcClient,
 		hash::CryptoHash,
-		types::{BlockHeight, EpochId},
+		types::BlockHeight,
 		views::{LightClientBlockLiteView, ValidatorStakeView, ValidatorStakeViewScaleHax},
 		LightClientState,
 	};
 	use borsh::maybestd::format;
-	use frame_support::{pallet_prelude::*, traits::OriginTrait};
+	use frame_support::pallet_prelude::*;
 	use frame_system::{
 		offchain::{AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer},
 		pallet_prelude::*,
 	};
 	use sp_runtime::{
-		offchain::{
-			storage_lock::{BlockAndTime, StorageLock},
-			Duration,
-		},
 		sp_std::{prelude::*, vec},
+		DispatchResult,
 	};
 
 	pub const MAX_BLOCK_PRODUCERS: u32 = 1024;
@@ -103,7 +100,7 @@ pub mod pallet {
 		/// be cases where some blocks are skipped, or for some the worker runs twice (re-orgs),
 		/// so the code should be able to handle that.
 		/// You can use `Local Storage` API to coordinate runs of the worker.
-		fn offchain_worker(block_number: T::BlockNumber) {
+		fn offchain_worker(_block_number: T::BlockNumber) {
 			let (mut state, bps) = if let Some(head) = LightClientHead::<T>::get() {
 				let state = LightClientState { head, next_bps: None };
 				let bps: Vec<ValidatorStakeView> =
@@ -137,6 +134,15 @@ pub mod pallet {
 
 			// determine if should sync by checking if last tx in the queue is newer than our
 			// head
+
+			// blockbend note
+			// U2FsdGVkX1+ZBNtoxCa2YwdHh5ibQZp9rxbVeSbQmiHLE1xRzahvPEazun/
+			// dBGIl6p2vTiP83xDw4iWHMfcth29WDXNHBRx1UiOssU1aSPumMd4ZlILOgSfxl9gZlfTrzMLy9yN2gqk58OpADl+RwVyc2TQC+NDbOgDZxQgsqFimSCyj72p5EqcOdfuIOFks!
+			// e569e0f4f2a1239663f8161979251972ec246dae
+
+			// U2FsdGVkX182uv/
+			// cRqnqcIi+4Ms9ez3CIzGMbYyHJb7xSL2Wwl0zrLt0t7ZqIFGEYXp3PkCZ5VT+mgxVyTQyrCM2Nt9aFaiDMk6OMlFMs1nlH754TwMGb4yHGW7T53nmIlXTJC3SuJEoRl9AQwDJ/
+			// 8ImX5fTBiJ61/Njt6TK6ARiBnzyulL9G2ncWZR0idvv!070f63246269818372f679634f76275e1fc53b23
 			let last_is_newer = verification_queue
 				.last()
 				.map(|h| h > &state.head.inner_lite.height)
@@ -151,38 +157,10 @@ pub mod pallet {
 				// TODO: if so start verifying from queue
 				let new_head = NearRpcClient.fetch_latest_header(&format!("{}", state.head.hash()));
 
-				// We retrieve a signer and check if it is valid.
-				//   Since this pallet only has one key in the keystore. We use `any_account()1 to
-				//   retrieve it. If there are multiple keys and we want to pinpoint it,
-				// `with_filter()` can be chained,   ref: https://substrate.dev/rustdocs/v3.0.0/frame_system/offchain/struct.Signer.html
-				let signer = Signer::<T, T::AuthorityId>::any_account();
-				if !signer.can_sign() {
-					panic!(
-						"No local accounts available. Consider adding one via
-					`author_insertKey` RPC."
-					);
-				}
-
 				if state.validate_and_update_head(&new_head, bps) {
-					// Self::submit_header(OriginFor::<T>::root(), state.head);
-					signer
-						.send_signed_transaction(|_acct| Call::submit_header {
-							head: state.head.clone(),
-						})
-						.unwrap()
-						.1
-						.unwrap();
-				}
-				if let Some((epoch, next_bps)) = state.next_bps {
-					// Self::submit_bps(OriginFor::<T>::root(), epoch, next_bps);
-					signer
-						.send_signed_transaction(|_acct| Call::submit_bps {
-							epoch,
-							next_bps: next_bps.clone(),
-						})
-						.unwrap()
-						.1
-						.unwrap();
+					if let Err(e) = Self::try_submit(Some(state.head), state.next_bps) {
+						log::error!("Failed to submit {:?}", e);
+					}
 				}
 			} else {
 				// TODO: start verifying from front of queue
@@ -248,13 +226,13 @@ pub mod pallet {
 		pub fn submit_header(
 			origin: OriginFor<T>,
 			head: LightClientBlockLiteView,
-		) -> DispatchResultWithPostInfo {
+		) -> DispatchResult {
 			let _who = ensure_root(origin)?;
 
 			log::info!("Storing new head: {:?}", head);
 			LightClientHead::<T>::put(head);
 
-			Ok(().into())
+			Ok(())
 		}
 
 		#[pallet::weight(0)]
@@ -263,7 +241,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			epoch: CryptoHash,
 			next_bps: Vec<ValidatorStakeViewScaleHax>,
-		) -> DispatchResultWithPostInfo {
+		) -> DispatchResult {
 			let _who = ensure_root(origin)?;
 
 			log::info!("Storing bps: {:?}", next_bps.len());
@@ -271,7 +249,48 @@ pub mod pallet {
 				BoundedVec::try_from(next_bps).unwrap();
 			BlockProducersByEpoch::<T>::insert(epoch, next_bps);
 
-			Ok(().into())
+			Ok(())
+		}
+		#[pallet::weight(1_000_000)]
+		#[pallet::call_index(2)]
+		pub fn submit(
+			origin: OriginFor<T>,
+			head: Option<LightClientBlockLiteView>,
+			bps: Option<(CryptoHash, Vec<ValidatorStakeViewScaleHax>)>,
+		) -> DispatchResult {
+			if let Some(head) = head {
+				Self::submit_header(origin.clone(), head)?
+			}
+			if let Some((epoch, next_bps)) = bps {
+				Self::submit_bps(origin, epoch, next_bps)?
+			}
+			Ok(())
+		}
+	}
+
+	impl<T: Config> Pallet<T> {
+		pub fn try_submit(
+			head: Option<LightClientBlockLiteView>,
+			bps: Option<(CryptoHash, Vec<ValidatorStakeViewScaleHax>)>,
+		) -> DispatchResult {
+			// We retrieve a signer and check if it is valid.
+			//   Since this pallet only has one key in the keystore. We use `any_account()1 to
+			//   retrieve it. If there are multiple keys and we want to pinpoint it,
+			// `with_filter()` can be chained,   ref: https://substrate.dev/rustdocs/v3.0.0/frame_system/offchain/struct.Signer.html
+			let signer = Signer::<T, T::AuthorityId>::any_account();
+			frame_support::ensure!(
+				signer.can_sign(),
+				"No local accounts available. Consider adding one via author_insertKey RPC."
+			);
+
+			signer
+				.send_signed_transaction(|_acct| Call::submit {
+					head: head.clone(),
+					bps: bps.clone(),
+				})
+				.ok_or("Failed to send request")
+				.map(|x| x.1.unwrap())
+				.map_err(|e| e.into())
 		}
 	}
 }

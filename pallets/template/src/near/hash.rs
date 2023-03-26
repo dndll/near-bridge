@@ -230,7 +230,7 @@ mod tests {
 	struct Struct {
 		hash: CryptoHash,
 	}
-	
+
 	#[test]
 	fn test_base58_successes() {
 		for (encoded, hash) in [
